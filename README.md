@@ -37,23 +37,55 @@ Every title starts with a `label` (default: your user name) so machines and acco
 
 Short blips are never sent: an agent that pauses mid-turn, or a prompt you answer within the delay, produces nothing. Each finished turn or wait is sent once, even when Herdr repeats the event.
 
-## Install
+## How the pieces fit
 
-```sh
-herdr plugin install devicki/herdr-pager --ref v0.1.0
+```
+account A: herdr-pager ─(token A → topic a)─┐
+account B: herdr-pager ─(token B → topic b)─┼─▶ one ntfy server ─▶ your phone (one read-only user,
+cron, systemd, scripts ─(herdr-pager run)───┘                        subscribed to a and b)
 ```
 
-Requires `bash` (3.2 is enough), `jq` and `curl`, on Linux or macOS. Install it in every account whose agents and jobs you want to hear about. It also puts the `herdr-pager` command in `~/.local/bin` for scripts, cron and the shell hook.
+- The plugin only publishes; it does not run a server. Any ntfy server works, including the public ntfy.sh (messages then pass through it).
+- One server is enough for every machine and account: give each account its own topic and a token that can only write to it, and give your phone one user that can read them all.
 
-### 1. An ntfy server and a token
+## Install
 
-Any ntfy server works, including ntfy.sh. For a private one, [`docs/ntfy`](docs/ntfy) has a compose file and a server config that denies everything by default, gives each publisher write access to one topic, and your devices read access. On a tailnet, `tailscale serve --bg --https=8446 http://127.0.0.1:2586` puts it on HTTPS without opening a port to the internet.
+Requires `bash` (3.2 is enough), `jq` and `curl`, on Linux or macOS.
+
+### 1. An ntfy server (once)
+
+Skip this if you already have one. [`docs/ntfy`](docs/ntfy) is a private setup that denies everything by default:
+
+```sh
+mkdir -p ~/ntfy && cd ~/ntfy          # copy compose.yml and server.yml from docs/ntfy here
+docker compose run --rm ntfy user hash       # twice: a password for your phone, one for each publisher
+docker compose run --rm ntfy token generate  # once per publishing account
+# put the hashes and tokens into server.yml (auth-users, auth-access, auth-tokens), then:
+docker compose up -d
+curl -s http://127.0.0.1:2586/v1/health      # {"healthy":true}
+```
+
+The server listens on `127.0.0.1:2586` only. To reach it from your phone over a tailnet, without opening a port to the internet:
+
+```sh
+tailscale serve --bg --https=8446 http://127.0.0.1:2586   # https://<host>.<tailnet>.ts.net:8446
+```
+
+`base-url` in `server.yml` must be exactly that address. Both survive a reboot: the container has `restart: unless-stopped`, and `tailscale serve --bg` is kept by tailscaled. To add an account later, add a publisher user, an `auth-access` line and a token, then `docker compose up -d`.
 
 For iOS, keep `upstream-base-url: "https://ntfy.sh"`: iPhones only get instant pushes through Apple's service, and ntfy sends just a message id and a topic hash that way; the phone fetches the message from your server.
 
-### 2. Settings
+### 2. The plugin, in each account
 
-The plugin writes a commented template to `$(herdr plugin config-dir devicki.pager)/pager.conf` the first time it runs. Fill in:
+```sh
+herdr plugin install devicki/herdr-pager --ref v0.2.0
+```
+
+It starts working at once; no restart is needed. It also links the `herdr-pager` command into `~/.local/bin` the first time it runs, for scripts, cron and the shell hook.
+
+### 3. Settings
+
+Open `pager.conf` in the plugin's config directory (`herdr plugin config-dir devicki.pager` prints it; the plugin leaves a commented template there) and fill in:
 
 ```
 url = https://your-host.your-tailnet.ts.net:8446
@@ -64,15 +96,15 @@ label = work
 
 Keep the file private (`chmod 600`); the token never appears in command lines. `HERDR_PAGER_URL`, `HERDR_PAGER_TOPIC` and `HERDR_PAGER_TOKEN` override the file.
 
-### 3. Check it
+### 4. Check it
 
 ```sh
-herdr-pager test
+herdr plugin action invoke devicki.pager.test   # or `herdr-pager test` once it is on PATH
 ```
 
-### 4. Subscribe
+### 5. Subscribe on your phone
 
-In the ntfy app (iOS, Android) or the web app, add your server with the exact `base-url`, log in as your device user, and subscribe to each topic.
+In the ntfy app (iOS or Android): tap **+**, enter the topic, turn on **Use another server** and enter the server address (exactly `base-url`), then log in as your device user. Repeat for each account's topic; the login is shared. With a tailnet-only server, Tailscale has to be on for the phone to fetch the message. The web app at the same address works on a laptop.
 
 ## Commands, scripts and scheduled jobs
 
@@ -93,11 +125,16 @@ systemd: [`docs/systemd/herdr-pager-failure@.service`](docs/systemd/herdr-pager-
 ### Long shell commands, without a wrapper
 
 ```sh
-# ~/.bashrc or ~/.zshrc
-eval "$(herdr-pager shell-init bash)"   # or zsh
+# ~/.bashrc                                  ~/.zshrc
+eval "$(herdr-pager shell-init bash)"        # eval "$(herdr-pager shell-init zsh)"
 ```
 
-Any command that runs `shell_threshold` seconds or longer (default 60) is reported when it ends, with its exit code. Interactive tools and agents (`vim`, `less`, `ssh`, `lazygit`, `claude`, ...) are skipped; see `shell_skip`. The bash version uses the `DEBUG` trap and `PROMPT_COMMAND`, so it replaces another `DEBUG` trap if you have one.
+```fish
+# ~/.config/fish/config.fish
+herdr-pager shell-init fish | source
+```
+
+Any command that runs `shell_threshold` seconds or longer (default 60) is reported when it ends, with its exit code. Interactive tools and agents (`vim`, `less`, `ssh`, `lazygit`, `claude`, ...) are skipped; see `shell_skip`. fish uses its `fish_postexec` event and zsh its `preexec`/`precmd` hooks; bash uses the `DEBUG` trap and `PROMPT_COMMAND`, so it replaces another `DEBUG` trap if you have one.
 
 ## Settings
 
@@ -117,6 +154,17 @@ Any command that runs `shell_threshold` seconds or longer (default 60) is report
 - **Questions in plain text**: an agent that asks something in its reply, without a permission prompt, counts as finished, not waiting. The reply is in the message either way.
 - **Agents**: any agent Herdr tracks works. The last reply is read from Claude Code and Codex transcripts; other agents get the session title only.
 - Herdr's event hooks have no timeout, so the delayed check runs detached and every request is capped at 10 seconds.
+
+## Update and uninstall
+
+Herdr has no update command; reinstall at the new tag. `pager.conf` and the enabled state survive a reinstall.
+
+```sh
+herdr plugin install devicki/herdr-pager --ref v0.2.0 --yes
+herdr plugin uninstall devicki.pager
+```
+
+Uninstalling leaves `pager.conf` in the config directory and the `~/.local/bin/herdr-pager` link; remove them, and the shell hook line, if you do not reinstall. The ntfy server is yours to keep or stop (`docker compose down`, `tailscale serve --https=8446 off`).
 
 ## Development
 

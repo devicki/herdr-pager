@@ -5,7 +5,7 @@
 #   herdr-pager run [-t TITLE] [-q] -- CMD...    run CMD, then report success or failure
 #   herdr-pager send [-t TITLE] [-p 1-5] [-g TAGS] [MESSAGE]   send a message (or stdin)
 #   herdr-pager test                             send a test notification
-#   herdr-pager shell-init bash|zsh              print the hook that reports long commands
+#   herdr-pager shell-init bash|zsh|fish         print the hook that reports long commands
 #
 # Internal: event (plugin hook), confirm (delayed agent check), shell-done (shell hook).
 set -uo pipefail
@@ -316,7 +316,19 @@ trap '__pager_preexec' DEBUG
 PROMPT_COMMAND="__pager_rc=\\\$?; \${PROMPT_COMMAND:+\$PROMPT_COMMAND; }__pager_precmd"
 EOF
     ;;
-  (*) echo "usage: herdr-pager shell-init bash|zsh" >&2; return 2 ;;
+  (fish) cat <<EOF
+# herdr-pager: report commands that ran ${threshold}s or longer
+function __pager_postexec --on-event fish_postexec
+    set -l rc \$status
+    set -l secs (math --scale=0 "\$CMD_DURATION / 1000")
+    if test \$secs -ge $threshold
+        herdr-pager shell-done \$rc \$secs "\$argv" >/dev/null 2>&1 &
+        disown 2>/dev/null
+    end
+end
+EOF
+    ;;
+  (*) echo "usage: herdr-pager shell-init bash|zsh|fish" >&2; return 2 ;;
   esac
 }
 

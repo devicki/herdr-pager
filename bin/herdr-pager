@@ -1,0 +1,343 @@
+#!/usr/bin/env bash
+# herdr-pager: push notifications to ntfy when an agent finishes or needs you, and when a
+# command, script or scheduled job ends. Works inside Herdr (plugin hooks, panes) and outside it.
+#
+#   herdr-pager run [-t TITLE] [-q] -- CMD...    run CMD, then report success or failure
+#   herdr-pager send [-t TITLE] [-p 1-5] [-g TAGS] [MESSAGE]   send a message (or stdin)
+#   herdr-pager test                             send a test notification
+#   herdr-pager shell-init bash|zsh              print the hook that reports long commands
+#
+# Internal: event (plugin hook), confirm (delayed agent check), shell-done (shell hook).
+set -uo pipefail
+
+# herdr runs plugin commands with a minimal PATH; ensure jq and curl resolve on common installs.
+export PATH="/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:${PATH:-}"
+
+self="$(cd "$(dirname "$0")" && pwd)/$(basename "$0")"
+H="${HERDR_BIN_PATH:-herdr}"
+confdir="${HERDR_PLUGIN_CONFIG_DIR:-${XDG_CONFIG_HOME:-$HOME/.config}/herdr/plugins/config/devicki.pager}"
+statedir="${HERDR_PLUGIN_STATE_DIR:-${XDG_STATE_HOME:-$HOME/.local/state}/herdr/plugins/devicki.pager}"
+conf="$confdir/pager.conf"
+
+# A commented template on first run, so there is a file to fill in.
+if [ ! -e "$conf" ] && mkdir -p "$confdir" 2>/dev/null; then
+  cat 2>/dev/null >"$conf" <<'EOF' || :
+# herdr-pager settings: one `key = value` per line. Lines starting with # are ignored.
+#
+# Where to publish (required). The token needs write access to the topic.
+# url = https://ntfy.example.ts.net
+# topic = herdr
+# token = tk_...
+#
+# Shown at the start of every title, to tell machines or accounts apart. Default: your user name.
+# label = work
+#
+# Seconds an agent must stay finished / waiting before it is reported. Short blips (an agent
+# that pauses mid-turn, a prompt you answer right away) are never sent.
+# done_delay = 15
+# blocked_delay = 10
+#
+# Shell hook (herdr-pager shell-init): report commands that ran at least this many seconds,
+# except these programs (interactive tools and agents).
+# shell_threshold = 60
+# shell_skip = vim nvim vi nano emacs hx less more man top htop btop lazygit tig ssh mosh tmux herdr claude codex devin watch tail
+EOF
+fi
+conf_get() {
+  [ -f "$conf" ] && sed -n "s/^[[:space:]]*$1[[:space:]]*=[[:space:]]*//p" "$conf" | tail -n1
+}
+url="${HERDR_PAGER_URL:-$(conf_get url)}"
+topic="${HERDR_PAGER_TOPIC:-$(conf_get topic)}"
+token="${HERDR_PAGER_TOKEN:-$(conf_get token)}"
+label="$(conf_get label)"
+label="${label:-${USER:-$(id -un)}}"
+
+# Mask what looks like a credential before it leaves the machine.
+redact() {
+  sed -E \
+    -e 's/(sk|pk|rk)-[A-Za-z0-9_-]{16,}/[redacted]/g' \
+    -e 's/(gh[pousr]|github_pat)_[A-Za-z0-9_]{20,}/[redacted]/g' \
+    -e 's/xox[abprs]-[A-Za-z0-9-]{10,}/[redacted]/g' \
+    -e 's/AKIA[0-9A-Z]{16}/[redacted]/g' \
+    -e 's/tk_[A-Za-z0-9]{20,}/[redacted]/g' \
+    -e 's/eyJ[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{10,}/[redacted]/g' \
+    -e 's/(([Pp]ass(word|wd)?|PASS(WORD|WD)?|[Ss]ecret|SECRET|[Tt]oken|TOKEN|[Aa]pi[_-]?[Kk]ey|API[_-]?KEY)[[:space:]]*[:=][[:space:]]*)[^[:space:]]+/\1[redacted]/g'
+}
+
+# publish TITLE MESSAGE [PRIORITY] [TAGS,...]
+# The token goes to curl on stdin, not in its arguments, so it never shows up in `ps`.
+publish() {
+  if [ -z "$url" ] || [ -z "$topic" ]; then
+    echo "herdr-pager: set url and topic in $conf" >&2
+    return 1
+  fi
+  local body title=$1
+  # Every title carries the label, to tell machines and accounts apart in one list.
+  case "$title" in ("[$label]"*) ;; (*) title="[$label] $title" ;; esac
+  body=$(jq -n --arg topic "$topic" --arg title "$title" --arg message "$2" --argjson priority "${3:-3}" --arg tags "${4:-}" \
+    '{topic: $topic, title: $title, message: $message, priority: $priority}
+     + (if $tags != "" then {tags: ($tags | split(","))} else {} end)') || return 1
+  { [ -z "$token" ] || printf 'header = "Authorization: Bearer %s"\n' "$token"; } |
+    curl -fsS --max-time 10 --retry 2 --retry-delay 2 -K - -H 'Content-Type: application/json' \
+      --data-binary "$body" "${url%/}/" >/dev/null
+}
+
+duration() {
+  local s=$1
+  if [ "$s" -ge 3600 ]; then printf '%dh%02dm' $((s / 3600)) $((s % 3600 / 60))
+  elif [ "$s" -ge 60 ]; then printf '%dm%02ds' $((s / 60)) $((s % 60))
+  else printf '%ds' "$s"; fi
+}
+
+# Where a pane is, and the command that takes you back to it. Sets ws and tab (labels),
+# where ("shop-api › agent"), jump ("herdr agent focus w1:p2") and agent_json.
+pane_context() {
+  local pane=$1
+  agent_json=$("$H" agent get "$pane" 2>/dev/null | jq -c '.result.agent // empty' 2>/dev/null)
+  [ -n "$agent_json" ] || agent_json=$("$H" pane get "$pane" 2>/dev/null | jq -c '.result.pane // empty' 2>/dev/null)
+  ws=$("$H" workspace get "$(jq -r '.workspace_id // empty' <<<"$agent_json")" 2>/dev/null | jq -r '.result.workspace.label // empty')
+  tab=$("$H" tab get "$(jq -r '.tab_id // empty' <<<"$agent_json")" 2>/dev/null | jq -r '.result.tab.label // empty')
+  where="${ws:-?}${tab:+ › $tab}"
+  jump="herdr${HERDR_SESSION:+ --session $HERDR_SESSION} agent focus $pane"
+}
+
+# Phones show ntfy messages as plain text: drop Markdown emphasis and heading marks.
+plain() { sed -E -e 's/\*\*([^*]+)\*\*/\1/g' -e 's/^#{1,6} +//'; }
+
+# The agent's last reply, from its own transcript when we know where that lives.
+last_reply() { # agent session-id
+  local f=""
+  case "$1" in
+  (claude) f=$(ls -t "$HOME"/.claude/projects/*/"$2".jsonl 2>/dev/null | head -n1)
+    [ -n "$f" ] && tail -n 400 "$f" | jq -Rc 'fromjson? | select(.type == "assistant")
+      | [.message.content[]? | select(.type == "text") | .text] | join("\n") | select(length > 0)' | tail -n1 | jq -r . ;;
+  (codex) f=$(find "$HOME/.codex/sessions" -name "*$2.jsonl" 2>/dev/null | tail -n1)
+    [ -n "$f" ] && tail -n 400 "$f" | jq -Rc 'fromjson? | select(.type == "event_msg" and .payload.type == "agent_message")
+      | .payload.message' | tail -n1 | jq -r . ;;
+  esac
+}
+
+# The bottom of the pane: what an agent that waits for you is asking.
+screen_tail() {
+  "$H" pane read "$1" --source visible 2>/dev/null |
+    sed -e 's/[[:space:]]*$//' -e 's/^[[:space:]│╭╮╰╯─┃┏┓┗┛━]*//' | grep -v '^$' | tail -n 8
+}
+
+clip() { # max-chars: trim stdin to a length ntfy shows comfortably
+  awk -v max="$1" '{ s = s (NR > 1 ? "\n" : "") $0 } END { if (length(s) > max) s = substr(s, 1, max) "…"; printf "%s", s }'
+}
+
+# ---- Herdr plugin: agents -------------------------------------------------------------------
+
+lock() { # name; a mkdir lock works the same on Linux and macOS
+  local i=0
+  while ! mkdir "$statedir/$1.lock" 2>/dev/null; do
+    i=$((i + 1))
+    [ "$i" -lt 50 ] || { rm -rf "$statedir/$1.lock"; continue; } # a lock older than ~5s is stale
+    sleep 0.1
+  done
+}
+unlock() { rmdir "$statedir/$1.lock" 2>/dev/null || :; }
+
+# Per pane: "status generation since". A generation is one working stretch or one wait; a
+# delayed check only reports if no newer transition replaced the one it was started for.
+read_state() { # key -> st gen since
+  st=unknown gen=0 since=0
+  [ ! -f "$statedir/$1" ] || read -r st gen since <"$statedir/$1" || :
+}
+
+event() {
+  local ev pane status key now
+  ev="${HERDR_PLUGIN_EVENT_JSON:-}"
+  pane=$(jq -r '.data.pane_id // empty' <<<"$ev" 2>/dev/null)
+  status=$(jq -r '.data.agent_status // empty' <<<"$ev" 2>/dev/null)
+  [ -n "$pane" ] && [ -n "$status" ] || return 0
+  mkdir -p "$statedir"
+  key=$(printf %s "${HERDR_SOCKET_PATH:-}#$pane" | cksum | cut -d' ' -f1)
+  now=$(date +%s)
+  lock "$key"
+  read_state "$key"
+  case "$status" in
+  (working) [ "$st" = working ] || { gen=$((gen + 1)); since=$now; } ;;
+  # Herdr says `done` for a turn that ended out of sight, `idle` when it ended in view.
+  (idle | done) if [ "$st" = working ]; then gen=$((gen + 1)); later "$pane" done "$gen"; fi ;;
+  (blocked) [ "$st" = blocked ] || { gen=$((gen + 1)); later "$pane" blocked "$gen"; } ;;
+  esac
+  printf '%s %s %s\n' "$status" "$gen" "$since" >"$statedir/$key"
+  unlock "$key"
+}
+
+# Check again after the delay, detached so the hook returns at once.
+later() { # pane kind gen
+  nohup bash "$self" confirm "$@" </dev/null >/dev/null 2>&1 &
+}
+
+confirm() {
+  local pane=$1 kind=$2 want=$3 key delay now cur sent="" agent session title body excerpt ws="" tab="" where="" jump="" head
+  key=$(printf %s "${HERDR_SOCKET_PATH:-}#$pane" | cksum | cut -d' ' -f1)
+  delay=$(conf_get "${kind}_delay")
+  sleep "${delay:-$([ "$kind" = done ] && echo 15 || echo 10)}"
+  cur=$("$H" agent get "$pane" 2>/dev/null | jq -r '.result.agent.agent_status // empty')
+  case "$kind:$cur" in (done:idle | done:done | blocked:blocked) ;; (*) return 0 ;; esac
+  # Claim before sending, under the lock, so concurrent checks never send twice.
+  lock "$key"
+  read_state "$key"
+  [ ! -f "$statedir/$key.sent" ] || read -r sent <"$statedir/$key.sent" || :
+  if [ "$gen" != "$want" ] || [ "$sent" = "$want" ]; then unlock "$key"; return 0; fi
+  echo "$want" >"$statedir/$key.sent"
+  unlock "$key"
+
+  now=$(date +%s)
+  pane_context "$pane"
+  agent=$(jq -r '.agent // "agent"' <<<"$agent_json")
+  session=$(jq -r '.agent_session.value // empty' <<<"$agent_json")
+  title=$(jq -r '.terminal_title_stripped // empty' <<<"$agent_json")
+  [ "$title" != "$agent" ] || title=""
+  # The title stays short for a lock screen (agent and workspace); the body opens with the tab,
+  # plus the session title when the tab name does not already carry it (auto-titled tabs do).
+  head=$tab
+  case "$tab" in (*"$title"*) ;; (*) head="${tab:+$tab
+}$title" ;; esac
+  if [ "$kind" = done ]; then
+    excerpt=$(last_reply "$agent" "$session" 2>/dev/null | plain | redact | clip 500)
+    body="${head:+$head
+}${excerpt:+$excerpt
+}⏱ $(duration $((now - since))) · $pane
+↩ $jump"
+    publish "$agent done · ${ws:-?}" "$body" 3 "white_check_mark,$agent"
+  else
+    excerpt=$(screen_tail "$pane" | redact | clip 600)
+    body="${head:+$head
+}${excerpt:+$excerpt
+}⏳ waiting for you · $pane
+↩ $jump"
+    publish "$agent needs you · ${ws:-?}" "$body" 4 "raising_hand,$agent"
+  fi
+}
+
+# ---- Commands, scripts and scheduled jobs -----------------------------------------------------
+
+# report RC SECONDS TITLE-OVERRIDE NAME COMMAND-LINE
+report() {
+  local rc=$1 secs=$2 t=$3 name=$4 line=$5 body ws="" tab="" where="" jump=""
+  if [ -n "${HERDR_PANE_ID:-}" ] && command -v "$H" >/dev/null 2>&1; then
+    pane_context "$HERDR_PANE_ID" 2>/dev/null || :
+  fi
+  body="\$ $(printf '%s' "$line" | redact | clip 300)
+⏱ $(duration "$secs") · $(hostname -s 2>/dev/null || hostname):$(pwd | sed "s|^$HOME|~|")${where:+
+in $where · $HERDR_PANE_ID
+↩ $jump}"
+  if [ "$rc" -eq 0 ]; then
+    publish "${t:-✓ $name finished}" "$body" 3 "heavy_check_mark"
+  else
+    publish "${t:-✗ $name failed (exit $rc)}" "$body" 4 "x"
+  fi
+}
+
+run() {
+  local t="" quiet=false start rc
+  while [ $# -gt 0 ]; do
+    case "$1" in
+    (-t) t=$2; shift 2 ;;
+    (-q) quiet=true; shift ;;
+    (--) shift; break ;;
+    (*) break ;;
+    esac
+  done
+  [ $# -gt 0 ] || { echo "usage: herdr-pager run [-t TITLE] [-q] -- CMD..." >&2; return 2; }
+  start=$(date +%s)
+  "$@"
+  rc=$?
+  { [ "$rc" -eq 0 ] && [ "$quiet" = true ]; } || report "$rc" $(($(date +%s) - start)) "$t" "$(basename "$1")" "$*" || :
+  return "$rc"
+}
+
+send() {
+  local t="herdr-pager" p=3 g="" msg
+  while [ $# -gt 0 ]; do
+    case "$1" in
+    (-t) t=$2; shift 2 ;;
+    (-p) p=$2; shift 2 ;;
+    (-g) g=$2; shift 2 ;;
+    (*) break ;;
+    esac
+  done
+  if [ $# -gt 0 ]; then msg="$*"; else msg=$(cat); fi
+  publish "$t" "$(printf '%s' "$msg" | redact)" "$p" "$g"
+}
+
+shell_done() { # RC SECONDS COMMAND-LINE
+  local skip first
+  skip=$(conf_get shell_skip)
+  skip=${skip:-vim nvim vi nano emacs hx less more man top htop btop lazygit tig ssh mosh tmux herdr claude codex devin watch tail}
+  first=$(printf '%s' "$3" | awk '{ for (i = 1; i <= NF; i++) if ($i !~ /=/ && $i != "sudo" && $i != "time" && $i != "env") { print $i; exit } }')
+  first=$(basename "${first:-x}")
+  case " $skip " in (*" $first "*) return 0 ;; esac
+  report "$1" "$2" "" "$first" "$3"
+}
+
+shell_init() {
+  local threshold
+  threshold=$(conf_get shell_threshold)
+  threshold=${threshold:-60}
+  case "${1:-}" in
+  (zsh) cat <<EOF
+# herdr-pager: report commands that ran ${threshold}s or longer
+zmodload zsh/datetime 2>/dev/null
+__pager_preexec() { __pager_cmd=\$1; __pager_start=\$EPOCHSECONDS; }
+__pager_precmd() {
+  local rc=\$?
+  [ -n "\${__pager_start:-}" ] || return 0
+  local d=\$((EPOCHSECONDS - __pager_start)); __pager_start=
+  (( d >= $threshold )) && { herdr-pager shell-done "\$rc" "\$d" "\$__pager_cmd" >/dev/null 2>&1 &! }
+  return 0
+}
+autoload -Uz add-zsh-hook
+add-zsh-hook preexec __pager_preexec
+add-zsh-hook precmd __pager_precmd
+EOF
+    ;;
+  (bash) cat <<EOF
+# herdr-pager: report commands that ran ${threshold}s or longer
+__pager_preexec() {
+  [ "\${__pager_armed:-}" = 1 ] || return 0
+  __pager_armed=0 __pager_start=\$SECONDS
+  __pager_cmd=\$(HISTTIMEFORMAT= history 1 2>/dev/null | sed 's/^ *[0-9]* *//')
+  __pager_cmd=\${__pager_cmd:-\$BASH_COMMAND}
+}
+__pager_precmd() {
+  if [ -n "\${__pager_start:-}" ]; then
+    local d=\$((SECONDS - __pager_start))
+    [ "\$d" -lt $threshold ] || (herdr-pager shell-done "\$__pager_rc" "\$d" "\$__pager_cmd" >/dev/null 2>&1 &)
+  fi
+  __pager_start= __pager_armed=1
+}
+trap '__pager_preexec' DEBUG
+PROMPT_COMMAND="__pager_rc=\\\$?; \${PROMPT_COMMAND:+\$PROMPT_COMMAND; }__pager_precmd"
+EOF
+    ;;
+  (*) echo "usage: herdr-pager shell-init bash|zsh" >&2; return 2 ;;
+  esac
+}
+
+# Keep `herdr-pager` on PATH when the plugin runs from a managed checkout that moves on reinstall.
+if [ -n "${HERDR_PLUGIN_ROOT:-}" ] && [ -d "$HOME/.local/bin" ]; then
+  link="$HOME/.local/bin/herdr-pager"
+  { [ -L "$link" ] || [ ! -e "$link" ]; } && [ "$(readlink "$link" 2>/dev/null)" != "$self" ] &&
+    ln -sfn "$self" "$link" 2>/dev/null || :
+fi
+
+cmd="${1:-help}"
+[ $# -eq 0 ] || shift
+case "$cmd" in
+(init) : ;;
+(event) event ;;
+(confirm) confirm "$@" ;;
+(run) run "$@" ;;
+(send) send "$@" ;;
+(test) publish "herdr-pager test" "Notifications from $(hostname -s 2>/dev/null || hostname) reach this topic." 3 "bell" &&
+  echo "sent to ${url%/}/$topic" ;;
+(shell-init) shell_init "$@" ;;
+(shell-done) shell_done "$@" ;;
+(*) sed -n '2,10p' "$self" | sed 's/^# \{0,1\}//' ;;
+esac

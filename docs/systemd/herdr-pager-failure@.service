@@ -1,0 +1,14 @@
+# Report a failed systemd user unit through herdr-pager, with the tail of its log.
+#
+#   cp herdr-pager-failure@.service ~/.config/systemd/user/
+#   systemctl --user edit backup.service     # add the two lines below, then save
+#     [Unit]
+#     OnFailure=herdr-pager-failure@%n.service
+#
+# For system units, install it under /etc/systemd/system and drop `--user` below.
+[Unit]
+Description=Report the failure of %i through herdr-pager
+
+[Service]
+Type=oneshot
+ExecStart=/bin/sh -c 'journalctl --user -u "%i" -n 15 --no-pager -o cat | %h/.local/bin/herdr-pager send -p 4 -g x -t "✗ %i failed ($MONITOR_SERVICE_RESULT, exit $MONITOR_EXIT_STATUS)"'

@@ -1,0 +1,12 @@
+# A self-hosted ntfy for herdr-pager. Bound to localhost; expose it with a reverse proxy or,
+# on a tailnet, `tailscale serve --bg --https=8446 http://127.0.0.1:2586`.
+services:
+  ntfy:
+    image: binwiederhier/ntfy:v2.28.0
+    command: serve
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:2586:80"
+    volumes:
+      - ./server.yml:/etc/ntfy/server.yml:ro
+      - ./data:/var/lib/ntfy

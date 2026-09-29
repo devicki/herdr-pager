@@ -1,0 +1,21 @@
+# ntfy server config for herdr-pager: everything is private unless granted below.
+# Password hashes: `docker compose run --rm ntfy user hash`. Tokens: `docker compose run --rm ntfy token generate`.
+base-url: "https://your-host.your-tailnet.ts.net:8446"   # exactly what the phone app is given
+listen-http: ":80"
+behind-proxy: true
+cache-file: "/var/lib/ntfy/cache.db"
+cache-duration: "72h"
+auth-file: "/var/lib/ntfy/auth.db"
+auth-default-access: "deny-all"
+enable-login: true
+auth-users:
+  - "phone:$2a$10$REPLACE_WITH_HASH:user"       # your devices: read-only
+  - "work-pub:$2a$10$REPLACE_WITH_HASH:user"    # one publisher per machine or account
+auth-access:
+  - "phone:work:ro"
+  - "work-pub:work:wo"
+auth-tokens:
+  - "work-pub:tk_REPLACE_WITH_TOKEN:herdr-pager work"
+# iOS instant delivery for a self-hosted server: only a poll request (message id, topic URL
+# hash) goes to ntfy.sh, and the phone fetches the message from this server.
+upstream-base-url: "https://ntfy.sh"

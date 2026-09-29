@@ -1,0 +1,19 @@
+id = "devicki.pager"
+name = "pager"
+version = "0.1.0"
+min_herdr_version = "0.9.1"
+platforms = ["linux", "macos"]
+description = "ntfy notifications when an agent finishes or needs you, and when a command, script or scheduled job ends, with the pane to jump back to."
+
+# Puts `herdr-pager` on PATH (for `run`, cron and the shell hook) and writes the config template.
+[[startup]]
+command = ["bash", "bin/herdr-pager", "init"]
+
+[[events]]
+on = "pane.agent_status_changed"
+command = ["bash", "bin/herdr-pager", "event"]
+
+[[actions]]
+id = "test"
+title = "pager: send a test notification"
+command = ["bash", "bin/herdr-pager", "test"]

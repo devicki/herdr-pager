@@ -32,6 +32,9 @@ if [ ! -e "$conf" ] && mkdir -p "$confdir" 2>/dev/null; then
 # Shown at the start of every title, to tell machines or accounts apart. Default: your user name.
 # label = work
 #
+# Language of the messages: en (default) or ko.
+# lang = ko
+#
 # Seconds an agent must stay finished / waiting before it is reported. Short blips (an agent
 # that pauses mid-turn, a prompt you answer right away) are never sent.
 # done_delay = 15
@@ -51,6 +54,29 @@ topic="${HERDR_PAGER_TOPIC:-$(conf_get topic)}"
 token="${HERDR_PAGER_TOKEN:-$(conf_get token)}"
 label="$(conf_get label)"
 label="${label:-${USER:-$(id -un)}}"
+lang="$(conf_get lang)"
+lang="${lang:-en}"
+
+# The words of a message, in English or Korean.
+word() {
+  case "$lang:$1" in
+  (ko:done) echo "작업 완료" ;;
+  (ko:needs) echo "확인 필요" ;;
+  (ko:finished) echo "완료" ;;
+  (ko:failed) echo "실패 (종료 코드 $2)" ;;
+  (ko:test) echo "herdr-pager 테스트" ;;
+  (ko:test-body) echo "$2의 알림이 이 채널로 잘 와요." ;;
+  (*:done) echo "done" ;;
+  (*:needs) echo "needs you" ;;
+  (*:finished) echo "finished" ;;
+  (*:failed) echo "failed (exit $2)" ;;
+  (*:test) echo "herdr-pager test" ;;
+  (*:test-body) echo "Notifications from $2 reach this topic." ;;
+  esac
+}
+
+# One body line: an icon, then the text, its continuation lines indented under it.
+line() { [ -z "$2" ] || printf '%s %s\n' "$1" "$(printf '%s' "$2" | sed '2,$s/^/   /')"; }
 
 # Mask what looks like a credential before it leaves the machine.
 redact() {
@@ -83,9 +109,13 @@ publish() {
 }
 
 duration() {
-  local s=$1
-  if [ "$s" -ge 3600 ]; then printf '%dh%02dm' $((s / 3600)) $((s % 3600 / 60))
-  elif [ "$s" -ge 60 ]; then printf '%dm%02ds' $((s / 60)) $((s % 60))
+  local h=$(($1 / 3600)) m=$(($1 % 3600 / 60)) s=$(($1 % 60))
+  if [ "$lang" = ko ]; then
+    if [ "$h" -gt 0 ]; then printf '%d시간 %d분' "$h" "$m"
+    elif [ "$m" -gt 0 ]; then printf '%d분 %d초' "$m" "$s"
+    else printf '%d초' "$s"; fi
+  elif [ "$h" -gt 0 ]; then printf '%dh%02dm' "$h" "$m"
+  elif [ "$m" -gt 0 ]; then printf '%dm%02ds' "$m" "$s"
   else printf '%ds' "$s"; fi
 }
 
@@ -173,7 +203,7 @@ later() { # pane kind gen
 }
 
 confirm() {
-  local pane=$1 kind=$2 want=$3 key delay now cur sent="" agent session title body excerpt ws="" tab="" where="" jump="" head
+  local pane=$1 kind=$2 want=$3 key delay now cur sent="" agent session title note body excerpt ws="" tab="" where="" jump=""
   key=$(printf %s "${HERDR_SOCKET_PATH:-}#$pane" | cksum | cut -d' ' -f1)
   delay=$(conf_get "${kind}_delay")
   sleep "${delay:-$([ "$kind" = done ] && echo 15 || echo 10)}"
@@ -195,23 +225,18 @@ confirm() {
   [ "$title" != "$agent" ] || title=""
   # The title stays short for a lock screen (agent and workspace); the body opens with the tab,
   # plus the session title when the tab name does not already carry it (auto-titled tabs do).
-  head=$tab
-  case "$tab" in (*"$title"*) ;; (*) head="${tab:+$tab
-}$title" ;; esac
+  note=$title
+  case "$tab" in (*"$title"*) note="" ;; esac
   if [ "$kind" = done ]; then
     excerpt=$(last_reply "$agent" "$session" 2>/dev/null | plain | redact | clip 500)
-    body="${head:+$head
-}${excerpt:+$excerpt
-}⏱ $(duration $((now - since))) · $pane
-↩ $jump"
-    publish "$agent done · ${ws:-?}" "$body" 3 "white_check_mark,$agent"
+    body=$(line 📂 "$tab"; line 📝 "$note"; line 💬 "$excerpt"
+      printf '⏱ %s  📍 %s\n↩ %s' "$(duration $((now - since)))" "$pane" "$jump")
+    publish "$agent $(word done) · ${ws:-?}" "$body" 3 "white_check_mark,$agent"
   else
     excerpt=$(screen_tail "$pane" | redact | clip 600)
-    body="${head:+$head
-}${excerpt:+$excerpt
-}⏳ waiting for you · $pane
-↩ $jump"
-    publish "$agent needs you · ${ws:-?}" "$body" 4 "raising_hand,$agent"
+    body=$(line 📂 "$tab"; line 📝 "$note"; line ❓ "$excerpt"
+      printf '📍 %s  ↩ %s' "$pane" "$jump")
+    publish "$agent $(word needs) · ${ws:-?}" "$body" 4 "raising_hand,$agent"
   fi
 }
 
@@ -219,18 +244,17 @@ confirm() {
 
 # report RC SECONDS TITLE-OVERRIDE NAME COMMAND-LINE
 report() {
-  local rc=$1 secs=$2 t=$3 name=$4 line=$5 body ws="" tab="" where="" jump=""
+  local rc=$1 secs=$2 t=$3 name=$4 cmdline=$5 body ws="" tab="" where="" jump=""
   if [ -n "${HERDR_PANE_ID:-}" ] && command -v "$H" >/dev/null 2>&1; then
     pane_context "$HERDR_PANE_ID" 2>/dev/null || :
   fi
-  body="\$ $(printf '%s' "$line" | redact | clip 300)
-⏱ $(duration "$secs") · $(hostname -s 2>/dev/null || hostname):$(pwd | sed "s|^$HOME|~|")${where:+
-in $where · $HERDR_PANE_ID
-↩ $jump}"
+  body=$(line 💻 "$(printf '%s' "$cmdline" | redact | clip 300)"
+    printf '⏱ %s  📁 %s' "$(duration "$secs")" "$(pwd | sed "s|^$HOME|~|")"
+    [ -z "$where" ] || printf '\n📂 %s\n📍 %s  ↩ %s' "$where" "$HERDR_PANE_ID" "$jump")
   if [ "$rc" -eq 0 ]; then
-    publish "${t:-✓ $name finished}" "$body" 3 "heavy_check_mark"
+    publish "${t:-$name $(word finished)}" "$body" 3 "heavy_check_mark"
   else
-    publish "${t:-✗ $name failed (exit $rc)}" "$body" 4 "x"
+    publish "${t:-$name $(word failed "$rc")}" "$body" 4 "x"
   fi
 }
 
@@ -347,7 +371,7 @@ case "$cmd" in
 (confirm) confirm "$@" ;;
 (run) run "$@" ;;
 (send) send "$@" ;;
-(test) publish "herdr-pager test" "Notifications from $(hostname -s 2>/dev/null || hostname) reach this topic." 3 "bell" &&
+(test) publish "$(word test)" "$(word test-body "$(hostname -s 2>/dev/null || hostname)")" 3 "bell" &&
   echo "sent to ${url%/}/$topic" ;;
 (shell-init) shell_init "$@" ;;
 (shell-done) shell_done "$@" ;;

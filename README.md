@@ -5,24 +5,24 @@ English | [한국어](README.ko.md)
 Get a push notification on your phone or laptop when an agent in [Herdr](https://herdr.dev) finishes or needs your answer, and when a command, script or scheduled job ends. Each message says what happened and which pane it came from, with the command that takes you back there. Delivery goes through [ntfy](https://ntfy.sh), ideally one you host yourself.
 
 ```
-[bot] claude done · shop-api
-1 · agent › Add refresh-token rotation
-Rotation is in. Tests pass; the diff is on the right.
-⏱ 4m12s · w9:p1
+✅ [bot] claude done · shop-api
+📂 1 · agent › Add refresh-token rotation
+💬 Rotation is in. Tests pass; the diff is on the right.
+⏱ 4m12s  📍 w9:p1
 ↩ herdr agent focus w9:p1
 
-[bot] claude needs you · shop-api          (high priority)
-1 · agent › Add refresh-token rotation
-Bash(rm -rf build)
-Do you want to proceed?
-❯ 1. Yes
-  2. No
-⏳ waiting for you · w9:p1
+🙋 [bot] claude needs you · shop-api                    (high priority)
+📂 1 · agent › Add refresh-token rotation
+❓ Bash(rm -rf build)
+   Do you want to proceed?
+📍 w9:p1  ↩ herdr agent focus w9:p1
 
-[bot] ✗ backup.sh failed (exit 7)                    (high priority)
-$ ./backup.sh --full
-⏱ 12m03s · isle-server:~/ops
+❌ [bot] backup.sh failed (exit 7)                      (high priority)
+💻 ./backup.sh --full
+⏱ 12m03s  📁 ~/ops
 ```
+
+Messages are in English by default; `lang = ko` switches them to Korean. The emoji in front of each title is the message's ntfy tag, which the apps show that way.
 
 ## What it reports
 
@@ -78,7 +78,7 @@ For iOS, keep `upstream-base-url: "https://ntfy.sh"`: iPhones only get instant p
 ### 2. The plugin, in each account
 
 ```sh
-herdr plugin install devicki/herdr-pager --ref v0.2.0
+herdr plugin install devicki/herdr-pager --ref v0.3.0
 ```
 
 It starts working at once; no restart is needed. It also links the `herdr-pager` command into `~/.local/bin` the first time it runs, for scripts, cron and the shell hook.
@@ -142,6 +142,7 @@ Any command that runs `shell_threshold` seconds or longer (default 60) is report
 | --- | --- | --- |
 | `url`, `topic`, `token` | | where to publish |
 | `label` | user name | prefix of every title |
+| `lang` | `en` | language of the messages: `en` or `ko` |
 | `done_delay` | 15 | seconds an agent must stay finished before it is reported |
 | `blocked_delay` | 10 | seconds an agent must keep waiting before it is reported |
 | `shell_threshold` | 60 | shell hook: minimum command duration in seconds |
@@ -160,7 +161,7 @@ Any command that runs `shell_threshold` seconds or longer (default 60) is report
 Herdr has no update command; reinstall at the new tag. `pager.conf` and the enabled state survive a reinstall.
 
 ```sh
-herdr plugin install devicki/herdr-pager --ref v0.2.0 --yes
+herdr plugin install devicki/herdr-pager --ref v0.3.0 --yes
 herdr plugin uninstall devicki.pager
 ```
 

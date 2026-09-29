@@ -5,24 +5,24 @@
 [Herdr](https://herdr.dev)의 에이전트가 작업을 마치거나 내 답을 기다릴 때, 그리고 명령·스크립트·예약 작업이 끝났을 때 폰이나 노트북으로 알림을 보내 주는 플러그인이에요. 알림마다 무슨 일이 있었는지, 어느 페인에서 일어났는지, 그리고 그 페인으로 돌아가는 명령까지 담겨요. 전송은 [ntfy](https://ntfy.sh)로 하고, 직접 호스팅하는 서버를 쓰는 걸 권해요.
 
 ```
-[bot] claude done · shop-api
-1 · agent › Add refresh-token rotation
-Rotation is in. Tests pass; the diff is on the right.
-⏱ 4m12s · w9:p1
+✅ [bot] claude 작업 완료 · shop-api
+📂 1 · agent › Add refresh-token rotation
+💬 Rotation is in. Tests pass; the diff is on the right.
+⏱ 4분 12초  📍 w9:p1
 ↩ herdr agent focus w9:p1
 
-[bot] claude needs you · shop-api          (높은 우선순위)
-1 · agent › Add refresh-token rotation
-Bash(rm -rf build)
-Do you want to proceed?
-❯ 1. Yes
-  2. No
-⏳ waiting for you · w9:p1
+🙋 [bot] claude 확인 필요 · shop-api                    (높은 우선순위)
+📂 1 · agent › Add refresh-token rotation
+❓ Bash(rm -rf build)
+   Do you want to proceed?
+📍 w9:p1  ↩ herdr agent focus w9:p1
 
-[bot] ✗ backup.sh failed (exit 7)                    (높은 우선순위)
-$ ./backup.sh --full
-⏱ 12m03s · isle-server:~/ops
+❌ [bot] backup.sh 실패 (종료 코드 7)                   (높은 우선순위)
+💻 ./backup.sh --full
+⏱ 12분 3초  📁 ~/ops
 ```
+
+위 예시는 설정에 `lang = ko`를 넣었을 때의 모습이에요. 기본값은 영어예요. 제목 앞의 이모지는 알림의 ntfy 태그를 앱이 그렇게 보여 주는 거예요.
 
 ## 알려 주는 것
 
@@ -78,7 +78,7 @@ iOS에서 쓰려면 `upstream-base-url: "https://ntfy.sh"`를 유지하세요. �
 ### 2. 플러그인 (계정마다)
 
 ```sh
-herdr plugin install devicki/herdr-pager --ref v0.2.0
+herdr plugin install devicki/herdr-pager --ref v0.3.0
 ```
 
 설치하면 바로 동작해요. 재시작할 필요 없어요. 처음 실행될 때 스크립트, cron, 셸 훅에서 쓸 수 있게 `herdr-pager` 명령을 `~/.local/bin`에 연결해 둬요.
@@ -92,6 +92,7 @@ url = https://your-host.your-tailnet.ts.net:8446
 topic = work
 token = tk_...
 label = work
+lang = ko
 ```
 
 파일은 본인만 읽게(`chmod 600`) 두세요. 토큰은 명령줄에 드러나지 않게 전달돼요. 환경 변수 `HERDR_PAGER_URL`, `HERDR_PAGER_TOPIC`, `HERDR_PAGER_TOKEN`이 있으면 파일보다 우선해요.
@@ -142,6 +143,7 @@ herdr-pager shell-init fish | source
 | --- | --- | --- |
 | `url`, `topic`, `token` | | 알림을 보낼 곳 |
 | `label` | 사용자 이름 | 모든 제목 앞에 붙는 이름 |
+| `lang` | `en` | 알림 언어: `en` 또는 `ko` |
 | `done_delay` | 15 | 완료 상태가 이 시간(초) 동안 이어져야 알림 |
 | `blocked_delay` | 10 | 대기 상태가 이 시간(초) 동안 이어져야 알림 |
 | `shell_threshold` | 60 | 셸 훅: 알릴 최소 실행 시간(초) |
@@ -160,7 +162,7 @@ herdr-pager shell-init fish | source
 Herdr에는 업데이트 명령이 없어서, 새 태그로 다시 설치하면 돼요. 다시 설치해도 `pager.conf`와 켜짐/꺼짐 상태는 그대로 남아요.
 
 ```sh
-herdr plugin install devicki/herdr-pager --ref v0.2.0 --yes
+herdr plugin install devicki/herdr-pager --ref v0.3.0 --yes
 herdr plugin uninstall devicki.pager
 ```
 

@@ -85,5 +85,12 @@ check "the shell hook skips interactive tools" 0 '.message | test("vim notes")'
 check "a long shell command is reported" 1 '(.title | test("make failed \\(exit 2\\)")) and (.message | test("1m35s"))'
 check "secrets are masked" 1 '.message == "deploy token=[redacted] done" and .priority == 5'
 
+# The same, in Korean (lang = ko).
+mkdir -p "$work/ko"
+printf 'url = http://127.0.0.1:%s\ntopic = t\nlabel = test\nlang = ko\n' "$port" >"$work/ko/pager.conf"
+env HERDR_PLUGIN_CONFIG_DIR="$work/ko" HERDR_PLUGIN_STATE_DIR="$work/state" bash "$here/bin/herdr-pager" shell-done 3 95 "make build"
+sleep 0.5
+check "lang = ko: Korean wording and durations" 1 '.title == "[test] make 실패 (종료 코드 3)" and (.message | test("1분 35초"))'
+
 [ "$fail" -eq 0 ] && echo PASS
 exit "$fail"

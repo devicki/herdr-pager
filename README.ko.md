@@ -71,7 +71,7 @@ curl -s http://127.0.0.1:2586/v1/health      # {"healthy":true}
 tailscale serve --bg --https=8446 http://127.0.0.1:2586   # https://<호스트>.<tailnet>.ts.net:8446
 ```
 
-`server.yml`의 `base-url`은 이 주소와 정확히 같아야 해요. 둘 다 재부팅해도 유지돼요. 컨테이너는 `restart: unless-stopped`이고, `tailscale serve --bg` 설정은 tailscaled가 보관해요. 나중에 계정을 추가하려면 알림 보낼 사용자, `auth-access` 한 줄, 토큰을 추가하고 `docker compose up -d`를 실행하세요.
+서버와 폰 모두 같은 tailnet에 Tailscale이 설치돼 있어야 하고, 관리 콘솔(DNS 메뉴)에서 MagicDNS와 HTTPS 인증서가 켜져 있어야 해요. `tailscale serve`는 root로 실행하거나, `sudo tailscale set --operator=$USER`로 내 계정에 권한을 준 뒤 실행하세요. `server.yml`의 `base-url`은 이 주소와 정확히 같아야 해요. 둘 다 재부팅해도 유지돼요. 컨테이너는 `restart: unless-stopped`이고, `tailscale serve --bg` 설정은 tailscaled가 보관해요. 나중에 계정을 추가하려면 알림 보낼 사용자, `auth-access` 한 줄, 토큰을 추가하고 `docker compose up -d`를 실행하세요.
 
 iOS에서 쓰려면 `upstream-base-url: "https://ntfy.sh"`를 유지하세요. 아이폰은 Apple 푸시로만 즉시 알림을 받는데, 이 경로로 나가는 건 메시지 id와 채널 해시뿐이에요. 본문은 아이폰이 내 서버에서 직접 가져와요.
 

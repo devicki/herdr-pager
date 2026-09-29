@@ -71,7 +71,7 @@ The server listens on `127.0.0.1:2586` only. To reach it from your phone over a 
 tailscale serve --bg --https=8446 http://127.0.0.1:2586   # https://<host>.<tailnet>.ts.net:8446
 ```
 
-`base-url` in `server.yml` must be exactly that address. Both survive a reboot: the container has `restart: unless-stopped`, and `tailscale serve --bg` is kept by tailscaled. To add an account later, add a publisher user, an `auth-access` line and a token, then `docker compose up -d`.
+This needs Tailscale on the server and the phone, in the same tailnet, with MagicDNS and HTTPS certificates turned on (admin console → DNS); `tailscale serve` runs as root, or as your user after `sudo tailscale set --operator=$USER`. `base-url` in `server.yml` must be exactly that address. Both survive a reboot: the container has `restart: unless-stopped`, and `tailscale serve --bg` is kept by tailscaled. To add an account later, add a publisher user, an `auth-access` line and a token, then `docker compose up -d`.
 
 For iOS, keep `upstream-base-url: "https://ntfy.sh"`: iPhones only get instant pushes through Apple's service, and ntfy sends just a message id and a topic hash that way; the phone fetches the message from your server.
 

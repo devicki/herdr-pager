@@ -81,7 +81,7 @@ For iOS, keep `upstream-base-url: "https://ntfy.sh"`: iPhones only get instant p
 ### 2. The plugin, in each account
 
 ```sh
-herdr plugin install devicki/herdr-pager --ref v0.5.1
+herdr plugin install devicki/herdr-pager --ref v0.5.2
 ```
 
 It starts working at once; no restart is needed. It also links the `herdr-pager` command into `~/.local/bin` the first time it runs, for scripts, cron and the shell hook.
@@ -156,7 +156,7 @@ Any command that runs `shell_threshold` seconds or longer (default 60) is report
 - **Herdr's own notifications**: if `[ui.toast] delivery` is `terminal` or `system`, Herdr also notifies you on the laptop you are attached from. Set it to `herdr` or `off` if you only want herdr-pager.
 - **What is sent**: the agent's last reply and the bottom of a waiting pane leave the machine for your ntfy server. Common credential shapes (API keys, tokens, `password=` values) are masked, and messages are cut to a few hundred characters, but keep secrets out of what agents print.
 - **Questions in plain text**: an agent that asks something in its reply, without a permission prompt, counts as finished, not waiting. The reply is in the message either way.
-- **Agents**: any agent Herdr tracks works. The last reply is read from Claude Code and Codex transcripts; other agents get the session title only.
+- **Agents**: any agent Herdr tracks works. The last reply is read from Claude Code and Codex transcripts; other agents get the session title only. Claude's agent view (`claude agents`) has no session of its own, so its message carries the background session that just finished, by name, with that session's reply.
 - Herdr's event hooks have no timeout, so the delayed check runs detached. Each attempt to publish is capped at 10 seconds; with two retries on timeouts and server errors, a send gives up after about 35 seconds and is queued.
 
 ## Update and uninstall
@@ -164,7 +164,7 @@ Any command that runs `shell_threshold` seconds or longer (default 60) is report
 Herdr has no update command; reinstall at the new tag. `pager.conf` and the enabled state survive a reinstall.
 
 ```sh
-herdr plugin install devicki/herdr-pager --ref v0.5.1 --yes
+herdr plugin install devicki/herdr-pager --ref v0.5.2 --yes
 herdr plugin uninstall devicki.pager
 ```
 
@@ -174,7 +174,7 @@ Uninstalling leaves `pager.conf` in the config directory and the `~/.local/bin/h
 
 ```sh
 herdr plugin link .
-./test.sh   # isolated Herdr + a stand-in ntfy: agent turns, blips, waits, commands, the shell hook filter, masking, the resend queue
+./test.sh   # isolated Herdr + a stand-in ntfy: agent turns, blips, waits, commands, the shell hook filter, masking, the resend queue, Claude's agent view
 ```
 
 To release, bump `version` in `herdr-plugin.toml`, update the `--ref` in both READMEs, commit, then `git tag -a vX.Y.Z -m vX.Y.Z && git push origin vX.Y.Z`.

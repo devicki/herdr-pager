@@ -188,6 +188,26 @@ pane_context() {
 # Phones show ntfy messages as plain text: drop Markdown emphasis and heading marks.
 plain() { sed -E -e 's/\*\*([^*]+)\*\*/\1/g' -e 's/^#{1,6} +//'; }
 
+# Claude's agent view (`claude agents`) has no session of its own. When it turns idle, the turn
+# that ended belongs to one of its background sessions: the finished one whose transcript changed
+# last, within the last five minutes. Prints "session-id<TAB>name", or nothing.
+agent_view_finished() { # pane
+  local cl now f s n t best="" bt=0
+  "$H" pane process-info --pane "$1" 2>/dev/null | jq -e 'any(.result.process_info.foreground_processes[].argv;
+    (.[0] // "" | split("/") | last) == "claude" and any(.[]; . == "agents"))' >/dev/null || return 0
+  cl=$(command -v claude || echo "$HOME/.local/bin/claude")
+  now=$(date +%s)
+  while IFS=$'\t' read -r s n; do
+    f=$(ls -t "$HOME"/.claude/projects/*/"$s".jsonl 2>/dev/null | head -n1)
+    [ -n "$f" ] || continue
+    t=$(stat -c %Y "$f" 2>/dev/null || stat -f %m "$f")
+    if [ "$t" -gt "$bt" ] && [ $((now - t)) -lt 300 ]; then bt=$t; best="$s"$'\t'"$n"; fi
+  done < <("$cl" agents --json --all 2>/dev/null | jq -r 'map(select(.kind == "interactive") | .sessionId) as $live
+    | .[] | select(.kind == "background" and .state == "done" and (.sessionId | IN($live[]) | not))
+    | [.sessionId, (.name // "" | gsub("[\t\n\r]"; " "))] | join("\t")')
+  [ -z "$best" ] || printf '%s\n' "$best"
+}
+
 # The agent's last reply, from its own transcript when we know where that lives.
 last_reply() { # agent session-id
   local f=""
@@ -261,7 +281,7 @@ later() { # pane kind gen
 }
 
 confirm() {
-  local pane=$1 kind=$2 want=$3 key delay now cur sent="" agent session title note body excerpt ws="" tab="" where="" ref="" jump="" hs=""
+  local pane=$1 kind=$2 want=$3 key delay now cur sent="" agent session title note body excerpt ws="" tab="" where="" ref="" jump="" hs="" bg=""
   key=$(printf %s "${HERDR_SOCKET_PATH:-}#$pane" | cksum | cut -d' ' -f1)
   delay=$(conf_get "${kind}_delay")
   case "$delay" in ('' | *[!0-9]*) delay=$([ "$kind" = done ] && echo 15 || echo 10) ;; esac
@@ -283,6 +303,11 @@ confirm() {
   session=$(jq -r '.agent_session.value // empty' <<<"$agent_json")
   title=$(jq -r '.terminal_title_stripped // empty' <<<"$agent_json")
   [ "$title" != "$agent" ] || title=""
+  # An agent view's turn is a background session's: report that one, by its name.
+  if [ "$kind" = done ] && [ "$agent" = claude ] && [ -z "$session" ]; then
+    bg=$(agent_view_finished "$pane")
+    [ -z "$bg" ] || { session=${bg%%$'\t'*}; title=${bg#*$'\t'}; }
+  fi
   # The title stays short for a lock screen (agent and workspace); the body opens with the tab,
   # plus the session title when the tab name does not already carry it (auto-titled tabs do).
   note=$title

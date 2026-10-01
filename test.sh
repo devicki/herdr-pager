@@ -9,7 +9,7 @@ work=${TEST_WORK:-$(mktemp -d)}
 herdr=$(command -v herdr)
 # Unix socket paths must stay under 108 bytes, so HOME is a short symlink to the scratch dir.
 home="${XDG_RUNTIME_DIR:-/tmp}/pager-test"
-env_=(env -i HOME="$home" PATH="${herdr%/*}:/usr/local/bin:/usr/bin:/bin" LANG=en_US.UTF-8 USER=tester)
+env_=(env -i HOME="$home" PATH="$work/bin:${herdr%/*}:/usr/local/bin:/usr/bin:/bin" LANG=en_US.UTF-8 USER=tester)
 h() { "${env_[@]}" "$herdr" "$@"; }
 fail=0
 check() { # description, expected count, jq filter over received messages
@@ -67,6 +67,34 @@ check "waiting for you is reported once, high priority" 1 '(.title | test("needs
 # Idle without a working stretch before it (Unknown -> Idle) is not a finished turn.
 say idle 3
 check "idle after a wait is not a finished turn" 1 '.title | test("done")'
+
+# Claude's agent view has no session of its own: a finished turn is reported with the background
+# session that just finished, by its name and reply. A session open in a pane is not that one.
+mkdir -p "$work/bin" "$work/home/.claude/projects/-w"
+cat >"$work/bin/claude" <<'EOF'
+#!/usr/bin/env bash
+if [ "${1:-}" = agents ] && [ "${2:-}" = --json ]; then
+  echo '[{"kind":"background","state":"done","sessionId":"bg0","name":"older"},
+    {"kind":"background","state":"done","sessionId":"bg1","name":"nightly triage"},
+    {"kind":"background","state":"done","sessionId":"bg2","name":"attached"},
+    {"kind":"interactive","status":"idle","sessionId":"bg2","name":"attached"}]'
+  exit
+fi
+exec -a claude python3 -c "import time; time.sleep(1e9)" "$@"
+EOF
+chmod +x "$work/bin/claude"
+for s in bg0 bg1 bg2; do
+  printf '{"type":"assistant","message":{"content":[{"type":"text","text":"reply of %s"}]}}\n' "$s" \
+    >"$work/home/.claude/projects/-w/$s.jsonl"
+  sleep 1
+done
+v=$(h pane split "$p" --direction right --no-focus | jq -r .result.pane.pane_id)
+h pane run "$v" ' claude --dangerously-skip-permissions agents' >/dev/null
+sleep 1
+h pane report-agent "$v" --source test --agent claude --state working >/dev/null; sleep 0.5
+h pane report-agent "$v" --source test --agent claude --state idle >/dev/null; sleep 3.5
+check "agent view: the background session that finished, by name and reply" 1 \
+  '(.message | test("📝 nightly triage")) and (.message | test("💬 reply of bg1"))'
 
 # Commands and jobs, through the CLI.
 cli=(env HERDR_PLUGIN_CONFIG_DIR="$work/home/.config/herdr/plugins/config/devicki.pager"

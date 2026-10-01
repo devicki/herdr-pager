@@ -45,6 +45,14 @@ if [ ! -e "$conf" ] && mkdir -p "$confdir" 2>/dev/null; then
 # except these programs (interactive tools and agents).
 # shell_threshold = 60
 # shell_skip = vim nvim vi nano emacs hx less more man top htop btop lazygit tig ssh mosh tmux herdr claude codex devin watch tail
+#
+# Longest part of a message, in characters, before it is cut with "…": the agent's reply, the
+# prompt of a waiting agent, a command line, and a failed command's error output. ntfy turns a
+# message over 4096 bytes into an attachment (Korean takes 3 bytes a character).
+# reply_chars = 500
+# prompt_chars = 600
+# command_chars = 300
+# error_chars = 600
 EOF
 fi
 # A value, without a trailing ` # note` or blanks (a `#` inside a value, as in a color, stays).
@@ -59,6 +67,13 @@ label="$(conf_get label)"
 label="${label:-${USER:-$(id -un)}}"
 lang="$(conf_get lang)"
 lang="${lang:-en}"
+# A length setting, or its default when unset or not a number.
+chars() { # key default
+  local v
+  v=$(conf_get "$1")
+  case "$v" in ('' | *[!0-9]*) v=$2 ;; esac
+  echo "$v"
+}
 
 # The words of a message, in English or Korean.
 word() {
@@ -228,7 +243,9 @@ screen_tail() {
 }
 
 clip() { # max-chars: trim stdin to a length ntfy shows comfortably
-  awk -v max="$1" '{ s = s (NR > 1 ? "\n" : "") $0 } END { if (length(s) > max) s = substr(s, 1, max) "…"; printf "%s", s }'
+  # jq counts characters in any locale; awk counts bytes under C or with mawk and BSD awk, and
+  # would cut Korean three times short, mid-character.
+  jq -Rsj --argjson max "$1" 'sub("\n+$"; "") | if length > $max then .[:$max] + "…" else . end'
 }
 
 # ---- Herdr plugin: agents -------------------------------------------------------------------
@@ -313,12 +330,12 @@ confirm() {
   note=$title
   case "$tab" in (*"$title"*) note="" ;; esac
   if [ "$kind" = done ]; then
-    excerpt=$(last_reply "$agent" "$session" 2>/dev/null | plain | redact | clip 500)
+    excerpt=$(last_reply "$agent" "$session" 2>/dev/null | plain | redact | clip "$(chars reply_chars 500)")
     body=$(line 📂 "$tab"; line 📝 "$note"; line 💬 "$excerpt"
       printf '⏱ %s  📍 %s\n↩ %s' "$(duration $((now - since)))" "$ref" "$jump")
     publish "$agent $(word done) · ${ws:-?}" "$body" 3 "white_check_mark,$agent"
   else
-    excerpt=$(screen_tail "$pane" | redact | clip 600)
+    excerpt=$(screen_tail "$pane" | redact | clip "$(chars prompt_chars 600)")
     body=$(line 📂 "$tab"; line 📝 "$note"; line ❓ "$excerpt"
       printf '📍 %s\n↩ %s' "$ref" "$jump")
     publish "$agent $(word needs) · ${ws:-?}" "$body" 4 "raising_hand,$agent"
@@ -333,8 +350,8 @@ report() {
   if [ -n "${HERDR_PANE_ID:-}" ] && command -v "$H" >/dev/null 2>&1; then
     pane_context "$HERDR_PANE_ID" 2>/dev/null || :
   fi
-  body=$(line 💻 "$(printf '%s' "$cmdline" | redact | clip 300)"
-    [ "$rc" -eq 0 ] || line ⚠️ "$(printf '%s' "$errtail" | redact | clip 600)"
+  body=$(line 💻 "$(printf '%s' "$cmdline" | redact | clip "$(chars command_chars 300)")"
+    [ "$rc" -eq 0 ] || line ⚠️ "$(printf '%s' "$errtail" | redact | clip "$(chars error_chars 600)")"
     printf '⏱ %s  📁 %s' "$(duration "$secs")" "$(pwd | sed "s|^$HOME|~|")"
     [ -z "$where" ] || printf '\n📂 %s\n📍 %s\n↩ %s' "$where" "$ref" "$jump")
   if [ "$rc" -eq 0 ]; then

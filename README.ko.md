@@ -81,7 +81,7 @@ iOS에서 쓰려면 `upstream-base-url: "https://ntfy.sh"`를 유지하세요. �
 ### 2. 플러그인 (계정마다)
 
 ```sh
-herdr plugin install devicki/herdr-pager --ref v0.5.2
+herdr plugin install devicki/herdr-pager --ref v0.6.0
 ```
 
 설치하면 바로 동작해요. 재시작할 필요 없어요. 처음 실행될 때 스크립트, cron, 셸 훅에서 쓸 수 있게 `herdr-pager` 명령을 `~/.local/bin`에 연결해 둬요.
@@ -151,11 +151,17 @@ herdr-pager shell-init fish | source
 | `blocked_delay` | 10 | 대기 상태가 이 시간(초) 동안 이어져야 알림 |
 | `shell_threshold` | 60 | 셸 훅: 알릴 최소 실행 시간(초) |
 | `shell_skip` | 대화형 도구와 에이전트 | 셸 훅: 알리지 않을 프로그램 |
+| `reply_chars` | 500 | 알림에 넣을 에이전트 답변의 최대 글자 수. 넘으면 `…`로 잘라요 |
+| `prompt_chars` | 600 | 같은 방식으로, 답을 기다리는 에이전트의 질문 화면 |
+| `command_chars` | 300 | 같은 방식으로, 명령줄 |
+| `error_chars` | 600 | 같은 방식으로, 실패한 명령의 에러 출력 |
+
+ntfy는 4096바이트가 넘는 메시지를 첨부 파일로 바꾸고, 한글은 한 글자가 3바이트예요. 그래서 메시지 전체가 한글 1,300자쯤을 넘지 않게 잡으세요.
 
 ## 참고
 
 - **Herdr 자체 알림:** `[ui.toast] delivery`가 `terminal`이나 `system`이면 Herdr도 접속한 노트북에 알림을 띄워요. herdr-pager 알림만 받고 싶다면 `herdr`나 `off`로 바꾸세요.
-- **밖으로 나가는 내용:** 에이전트의 마지막 답변과 대기 중인 페인의 아래쪽 화면이 ntfy 서버로 가요. 흔한 인증 정보 형태(API 키, 토큰, `password=` 값)는 가리고 몇백 자로 자르지만, 에이전트가 비밀값을 출력하지 않게 주의하세요.
+- **밖으로 나가는 내용:** 에이전트의 마지막 답변과 대기 중인 페인의 아래쪽 화면이 ntfy 서버로 가요. 흔한 인증 정보 형태(API 키, 토큰, `password=` 값)는 가리고 부분마다 몇백 자로 자르지만(`reply_chars` 등으로 조절), 에이전트가 비밀값을 출력하지 않게 주의하세요.
 - **글로 된 질문:** 권한 창 없이 답변 속에서 질문하면 "대기"가 아니라 "완료"로 알려요. 어느 쪽이든 답변 내용은 알림에 들어 있어요.
 - **에이전트 종류:** Herdr가 추적하는 에이전트는 모두 알려요. 마지막 답변은 Claude Code와 Codex 대화 기록에서 읽고, 다른 에이전트는 세션 제목만 보여요. Claude agent view(`claude agents`)는 자기 세션이 없어서, 방금 끝난 백그라운드 세션의 이름과 답변을 대신 보여 줘요.
 - Herdr의 이벤트 훅에는 타임아웃이 없어서, 지연 확인은 분리된 프로세스로 돌려요. 전송 시도 한 번은 10초로 제한하고, 시간 초과나 서버 오류일 때 두 번 다시 시도해서 최대 35초쯤 뒤에 포기하고 보관해 둬요.
@@ -165,7 +171,7 @@ herdr-pager shell-init fish | source
 Herdr에는 업데이트 명령이 없어서, 새 태그로 다시 설치하면 돼요. 다시 설치해도 `pager.conf`와 켜짐/꺼짐 상태는 그대로 남아요.
 
 ```sh
-herdr plugin install devicki/herdr-pager --ref v0.5.2 --yes
+herdr plugin install devicki/herdr-pager --ref v0.6.0 --yes
 herdr plugin uninstall devicki.pager
 ```
 

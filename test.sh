@@ -124,10 +124,14 @@ check "a message the server missed is resent, marked late" 1 '.title == "[test] 
 
 # The same, in Korean (lang = ko).
 mkdir -p "$work/ko"
-printf 'url = http://127.0.0.1:%s\ntopic = t\nlabel = test\nlang = ko\n' "$port" >"$work/ko/pager.conf"
+printf 'url = http://127.0.0.1:%s\ntopic = t\nlabel = test\nlang = ko\nerror_chars = 5\n' "$port" >"$work/ko/pager.conf"
 env HERDR_PLUGIN_CONFIG_DIR="$work/ko" HERDR_PLUGIN_STATE_DIR="$work/state" bash "$here/bin/herdr-pager" shell-done 3 95 "make build"
+# error_chars cuts by characters, also under the C locale where awk would count bytes.
+env LC_ALL=C HERDR_PLUGIN_CONFIG_DIR="$work/ko" HERDR_PLUGIN_STATE_DIR="$work/state" bash "$here/bin/herdr-pager" \
+  run -- sh -c 'echo 가나다라마바사 >&2; exit 1' 2>/dev/null
 sleep 0.5
 check "lang = ko: Korean wording and durations" 1 '.title == "[test] make 실패 (종료 코드 3)" and (.message | test("1분 35초"))'
+check "error_chars = 5: cut at five Korean characters" 1 '.message | test("⚠️ 가나다라마…")'
 
 [ "$fail" -eq 0 ] && echo PASS
 exit "$fail"

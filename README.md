@@ -81,7 +81,7 @@ For iOS, keep `upstream-base-url: "https://ntfy.sh"`: iPhones only get instant p
 ### 2. The plugin, in each account
 
 ```sh
-herdr plugin install devicki/herdr-pager --ref v0.5.2
+herdr plugin install devicki/herdr-pager --ref v0.6.0
 ```
 
 It starts working at once; no restart is needed. It also links the `herdr-pager` command into `~/.local/bin` the first time it runs, for scripts, cron and the shell hook.
@@ -150,11 +150,17 @@ Any command that runs `shell_threshold` seconds or longer (default 60) is report
 | `blocked_delay` | 10 | seconds an agent must keep waiting before it is reported |
 | `shell_threshold` | 60 | shell hook: minimum command duration in seconds |
 | `shell_skip` | interactive tools and agents | shell hook: programs never reported |
+| `reply_chars` | 500 | longest agent reply in a message, in characters; longer ones end in `…` |
+| `prompt_chars` | 600 | the same, for the prompt of a waiting agent |
+| `command_chars` | 300 | the same, for a command line |
+| `error_chars` | 600 | the same, for a failed command's error output |
+
+ntfy turns a message over 4096 bytes into an attachment, and Korean takes 3 bytes a character, so keep a whole message under about 1,300 Korean characters.
 
 ## Notes
 
 - **Herdr's own notifications**: if `[ui.toast] delivery` is `terminal` or `system`, Herdr also notifies you on the laptop you are attached from. Set it to `herdr` or `off` if you only want herdr-pager.
-- **What is sent**: the agent's last reply and the bottom of a waiting pane leave the machine for your ntfy server. Common credential shapes (API keys, tokens, `password=` values) are masked, and messages are cut to a few hundred characters, but keep secrets out of what agents print.
+- **What is sent**: the agent's last reply and the bottom of a waiting pane leave the machine for your ntfy server. Common credential shapes (API keys, tokens, `password=` values) are masked, and each part is cut to a few hundred characters (see `reply_chars` and the rest), but keep secrets out of what agents print.
 - **Questions in plain text**: an agent that asks something in its reply, without a permission prompt, counts as finished, not waiting. The reply is in the message either way.
 - **Agents**: any agent Herdr tracks works. The last reply is read from Claude Code and Codex transcripts; other agents get the session title only. Claude's agent view (`claude agents`) has no session of its own, so its message carries the background session that just finished, by name, with that session's reply.
 - Herdr's event hooks have no timeout, so the delayed check runs detached. Each attempt to publish is capped at 10 seconds; with two retries on timeouts and server errors, a send gives up after about 35 seconds and is queued.
@@ -164,7 +170,7 @@ Any command that runs `shell_threshold` seconds or longer (default 60) is report
 Herdr has no update command; reinstall at the new tag. `pager.conf` and the enabled state survive a reinstall.
 
 ```sh
-herdr plugin install devicki/herdr-pager --ref v0.5.2 --yes
+herdr plugin install devicki/herdr-pager --ref v0.6.0 --yes
 herdr plugin uninstall devicki.pager
 ```
 

@@ -47,6 +47,8 @@ ntfy=$!
 printf 'url = http://127.0.0.1:%s\ntopic = t\nlabel = test   # a note\ndone_delay = 2\nblocked_delay = 2\nagent_skip = devin,codex\n' "$port" \
   >"$work/home/.config/herdr/plugins/config/devicki.pager/pager.conf"
 
+# Scripts, cron and the shell hook run the command directly, through the ~/.local/bin link.
+[ -x "$here/bin/herdr-pager" ] || { echo "FAIL: bin/herdr-pager is not executable" >&2; fail=1; }
 h plugin link "$here" >/dev/null
 "${env_[@]}" "$herdr" server >/dev/null 2>&1 &
 for _ in $(seq 50); do h pane list >/dev/null 2>&1 && break; sleep 0.2; done

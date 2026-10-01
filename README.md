@@ -81,7 +81,7 @@ For iOS, keep `upstream-base-url: "https://ntfy.sh"`: iPhones only get instant p
 ### 2. The plugin, in each account
 
 ```sh
-herdr plugin install devicki/herdr-pager --ref v0.7.1
+herdr plugin install devicki/herdr-pager --ref v0.7.2
 ```
 
 It starts working at once; no restart is needed. It also links the `herdr-pager` command into `~/.local/bin` the first time it runs, for scripts, cron and the shell hook.
@@ -175,7 +175,7 @@ ntfy turns a message over 4096 bytes into an attachment, and Korean takes 3 byte
 Herdr has no update command; reinstall at the new tag. `pager.conf` and the enabled state survive a reinstall.
 
 ```sh
-herdr plugin install devicki/herdr-pager --ref v0.7.1 --yes
+herdr plugin install devicki/herdr-pager --ref v0.7.2 --yes
 herdr plugin uninstall devicki.pager
 ```
 

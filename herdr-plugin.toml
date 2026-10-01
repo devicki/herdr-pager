@@ -1,6 +1,6 @@
 id = "devicki.pager"
 name = "pager"
-version = "0.7.1"
+version = "0.7.2"
 min_herdr_version = "0.9.1"
 platforms = ["linux", "macos"]
 description = "ntfy notifications when an agent finishes or needs you, and when a command, script or scheduled job ends, with the pane to jump back to."

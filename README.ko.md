@@ -81,7 +81,7 @@ iOS에서 쓰려면 `upstream-base-url: "https://ntfy.sh"`를 유지하세요. �
 ### 2. 플러그인 (계정마다)
 
 ```sh
-herdr plugin install devicki/herdr-pager --ref v0.7.1
+herdr plugin install devicki/herdr-pager --ref v0.7.2
 ```
 
 설치하면 바로 동작해요. 재시작할 필요 없어요. 처음 실행될 때 스크립트, cron, 셸 훅에서 쓸 수 있게 `herdr-pager` 명령을 `~/.local/bin`에 연결해 둬요.
@@ -176,7 +176,7 @@ ntfy는 4096바이트가 넘는 메시지를 첨부 파일로 바꾸고, 한글�
 Herdr에는 업데이트 명령이 없어서, 새 태그로 다시 설치하면 돼요. 다시 설치해도 `pager.conf`와 켜짐/꺼짐 상태는 그대로 남아요.
 
 ```sh
-herdr plugin install devicki/herdr-pager --ref v0.7.1 --yes
+herdr plugin install devicki/herdr-pager --ref v0.7.2 --yes
 herdr plugin uninstall devicki.pager
 ```
 

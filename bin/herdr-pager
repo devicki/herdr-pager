@@ -166,14 +166,17 @@ duration() {
 }
 
 # Where a pane is, and the command that takes you back to it. Sets ws and tab (labels),
-# where ("shop-api › agent"), jump ("herdr agent focus w1:p2") and agent_json.
+# where ("shop-api › agent"), ref ("herdr:claude(w1:p2)", named the way herdr-ids' picker names
+# it, to paste into an agent's prompt), jump ("herdr agent focus w1:p2") and agent_json.
 pane_context() {
-  local pane=$1
+  local pane=$1 name
   agent_json=$("$H" agent get "$pane" 2>/dev/null | jq -c '.result.agent // empty' 2>/dev/null)
   [ -n "$agent_json" ] || agent_json=$("$H" pane get "$pane" 2>/dev/null | jq -c '.result.pane // empty' 2>/dev/null)
   ws=$("$H" workspace get "$(jq -r '.workspace_id // empty' <<<"$agent_json")" 2>/dev/null | jq -r '.result.workspace.label // empty')
   tab=$("$H" tab get "$(jq -r '.tab_id // empty' <<<"$agent_json")" 2>/dev/null | jq -r '.result.tab.label // empty')
   where="${ws:-?}${tab:+ › $tab}"
+  name=$("$H" pane get "$pane" 2>/dev/null | jq -r '.result.pane | .label // .agent // "shell" | gsub("[\t\n\r]"; " ")')
+  ref="herdr:${name:-shell}($pane)"
   # A named session lives under .../sessions/<name>/; the default one does not.
   hs=${HERDR_SESSION:-}
   if [ -z "$hs" ]; then
@@ -258,7 +261,7 @@ later() { # pane kind gen
 }
 
 confirm() {
-  local pane=$1 kind=$2 want=$3 key delay now cur sent="" agent session title note body excerpt ws="" tab="" where="" jump="" hs=""
+  local pane=$1 kind=$2 want=$3 key delay now cur sent="" agent session title note body excerpt ws="" tab="" where="" ref="" jump="" hs=""
   key=$(printf %s "${HERDR_SOCKET_PATH:-}#$pane" | cksum | cut -d' ' -f1)
   delay=$(conf_get "${kind}_delay")
   case "$delay" in ('' | *[!0-9]*) delay=$([ "$kind" = done ] && echo 15 || echo 10) ;; esac
@@ -287,12 +290,12 @@ confirm() {
   if [ "$kind" = done ]; then
     excerpt=$(last_reply "$agent" "$session" 2>/dev/null | plain | redact | clip 500)
     body=$(line 📂 "$tab"; line 📝 "$note"; line 💬 "$excerpt"
-      printf '⏱ %s  📍 %s\n↩ %s' "$(duration $((now - since)))" "$pane" "$jump")
+      printf '⏱ %s  📍 %s\n↩ %s' "$(duration $((now - since)))" "$ref" "$jump")
     publish "$agent $(word done) · ${ws:-?}" "$body" 3 "white_check_mark,$agent"
   else
     excerpt=$(screen_tail "$pane" | redact | clip 600)
     body=$(line 📂 "$tab"; line 📝 "$note"; line ❓ "$excerpt"
-      printf '📍 %s  ↩ %s' "$pane" "$jump")
+      printf '📍 %s\n↩ %s' "$ref" "$jump")
     publish "$agent $(word needs) · ${ws:-?}" "$body" 4 "raising_hand,$agent"
   fi
 }
@@ -301,14 +304,14 @@ confirm() {
 
 # report RC SECONDS TITLE-OVERRIDE NAME COMMAND-LINE [ERROR-TAIL]
 report() {
-  local rc=$1 secs=$2 t=$3 name=$4 cmdline=$5 errtail=${6:-} body ws="" tab="" where="" jump="" hs=""
+  local rc=$1 secs=$2 t=$3 name=$4 cmdline=$5 errtail=${6:-} body ws="" tab="" where="" ref="" jump="" hs=""
   if [ -n "${HERDR_PANE_ID:-}" ] && command -v "$H" >/dev/null 2>&1; then
     pane_context "$HERDR_PANE_ID" 2>/dev/null || :
   fi
   body=$(line 💻 "$(printf '%s' "$cmdline" | redact | clip 300)"
     [ "$rc" -eq 0 ] || line ⚠️ "$(printf '%s' "$errtail" | redact | clip 600)"
     printf '⏱ %s  📁 %s' "$(duration "$secs")" "$(pwd | sed "s|^$HOME|~|")"
-    [ -z "$where" ] || printf '\n📂 %s\n📍 %s  ↩ %s' "$where" "$HERDR_PANE_ID" "$jump")
+    [ -z "$where" ] || printf '\n📂 %s\n📍 %s\n↩ %s' "$where" "$ref" "$jump")
   if [ "$rc" -eq 0 ]; then
     publish "${t:-$name $(word finished)}" "$body" 3 "heavy_check_mark"
   else

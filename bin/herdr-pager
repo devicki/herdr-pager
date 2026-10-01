@@ -53,6 +53,14 @@ if [ ! -e "$conf" ] && mkdir -p "$confdir" 2>/dev/null; then
 # prompt_chars = 600
 # command_chars = 300
 # error_chars = 600
+#
+# Quiet hours, in this machine's local time (they may span midnight): nothing is sent then.
+# hold (default) sends what they held when they end, marked with its time; drop discards it.
+# quiet_hours = 00:00-08:00
+# quiet_mode = hold
+#
+# Agents never reported, by the name Herdr shows (claude, codex, devin, ...).
+# agent_skip = codex
 EOF
 fi
 # A value, without a trailing ` # note` or blanks (a `#` inside a value, as in a color, stays).
@@ -85,6 +93,9 @@ word() {
   (ko:test) echo "herdr-pager 테스트" ;;
   (ko:test-body) echo "$2의 알림이 이 채널로 잘 와요." ;;
   (ko:late) echo "🕒 $2에 보내려던 알림이에요 (서버 연결이 끊겨 늦게 전달)" ;;
+  (ko:held) echo "🌙 $2 알림이에요 (방해금지 시간이라 늦게 전달)" ;;
+  (ko:quiet) echo "방해금지 시간이라 $2에 보낼게요" ;;
+  (ko:quiet-drop) echo "방해금지 시간이라 보내지 않았어요" ;;
   (*:done) echo "done" ;;
   (*:needs) echo "needs you" ;;
   (*:finished) echo "finished" ;;
@@ -92,6 +103,9 @@ word() {
   (*:test) echo "herdr-pager test" ;;
   (*:test-body) echo "Notifications from $2 reach this topic." ;;
   (*:late) echo "🕒 Meant for $2; delivered late because the server was unreachable." ;;
+  (*:held) echo "🌙 From $2; held for quiet hours." ;;
+  (*:quiet) echo "quiet hours; held until $2" ;;
+  (*:quiet-drop) echo "quiet hours; not sent" ;;
   esac
 }
 
@@ -124,27 +138,63 @@ send_json() {
       --data-binary "$1" "${url%/}/" >/dev/null 2>&1
 }
 
+# Seconds until quiet hours end, or nothing outside them. quiet_hours = HH:MM-HH:MM in this
+# machine's local time; it may span midnight (23:00-07:00).
+quiet_left() {
+  conf_get quiet_hours | awk -v now="$(date +%H:%M:%S)" '
+    function sec(t, a) { split(t, a, ":"); return a[1] * 3600 + a[2] * 60 + a[3] }
+    { gsub(/[[:space:]]/, "") }
+    /^[0-9]?[0-9]:[0-9][0-9]-[0-9]?[0-9]:[0-9][0-9]$/ {
+      split($0, r, "-"); s = sec(r[1]); e = sec(r[2]); n = sec(now)
+      if (s != e && ((s < e && n >= s && n < e) || (s > e && (n >= s || n < e)))) print (e - n + 86400) % 86400
+    }'
+}
+
+# queue BODY [KIND]: keep a message for flush (KIND quiet: held for quiet hours); newest 100 kept.
+queue() {
+  local d="$statedir/spool" n
+  mkdir -p "$d" && printf '%s\n' "$1" >"$d/$(date +%s)-$$-${RANDOM:-0}${2:+-$2}.json" || return 1
+  n=$(ls -1 "$d" | grep -c '\.json$')
+  [ "$n" -le 100 ] || ls -1 "$d" | grep '\.json$' | sort | head -n $((n - 100)) | while IFS= read -r f; do rm -f "$d/$f"; done
+}
+
+# One detached sleeper sends what quiet hours held as soon as they end. A lock older than a day
+# is from a sleeper that died with the machine.
+wake() { # seconds
+  [ -z "$(find "$statedir/wake.lock" -maxdepth 0 -mmin +1440 2>/dev/null)" ] || rmdir "$statedir/wake.lock" 2>/dev/null
+  mkdir "$statedir/wake.lock" 2>/dev/null || return 0
+  nohup sh -c 'sleep "$1"; rmdir "$2"; exec bash "$3" flush' sh "$(($1 + 5))" "$statedir/wake.lock" "$self" \
+    </dev/null >/dev/null 2>&1 &
+}
+
 # publish TITLE MESSAGE [PRIORITY] [TAGS,...]
-# A message the server does not take is queued and sent later (see flush), not lost.
+# A message the server does not take is queued and sent later (see flush), not lost. In quiet
+# hours nothing is sent: it is held for their end, or dropped with quiet_mode = drop.
 publish() {
   if [ -z "$url" ] || [ -z "$topic" ]; then
     echo "herdr-pager: set url and topic in $conf" >&2
     return 1
   fi
-  local body title=$1 spool="$statedir/spool" n
+  local body title=$1 left
   # Every title carries the label, to tell machines and accounts apart in one list.
   [ "${title#"[$label]"}" != "$title" ] || title="[$label] $title"
   body=$(jq -n --arg topic "$topic" --arg title "$title" --arg message "$2" --argjson priority "${3:-3}" --arg tags "${4:-}" \
     '{topic: $topic, title: $title, message: $message, priority: $priority}
      + (if $tags != "" then {tags: ($tags | split(","))} else {} end)') || return 1
-  if send_json "$body"; then
-    [ ! -d "$spool" ] || flush
+  left=$(quiet_left)
+  if [ -n "$left" ] && [ -z "${loud:-}" ]; then
+    if [ "$(conf_get quiet_mode)" = drop ]; then
+      echo "herdr-pager: $(word quiet-drop)" >&2
+    else
+      queue "$body" quiet && wake "$left" && echo "herdr-pager: $(word quiet "$(clock $(($(date +%s) + left)))")" >&2
+    fi
     return 0
   fi
-  mkdir -p "$spool" && printf '%s\n' "$body" >"$spool/$(date +%s)-$$-${RANDOM:-0}.json" || return 1
-  # Keep the newest 100.
-  n=$(ls -1 "$spool" | grep -c '\.json$')
-  [ "$n" -le 100 ] || ls -1 "$spool" | grep '\.json$' | sort | head -n $((n - 100)) | while IFS= read -r f; do rm -f "$spool/$f"; done
+  if send_json "$body"; then
+    [ ! -d "$statedir/spool" ] || flush
+    return 0
+  fi
+  queue "$body" || return 1
   echo "herdr-pager: ${url%/} did not answer; queued to retry" >&2
   return 1
 }
@@ -152,16 +202,18 @@ publish() {
 clock() { date -d "@$1" +%H:%M 2>/dev/null || date -r "$1" +%H:%M; }
 
 # Resend queued messages, oldest first, each marked with the time it was meant for; drop
-# anything over a day old. One flusher at a time; a lock left by a crash expires in 2 minutes.
+# anything over a day old. Nothing goes out in quiet hours. One flusher at a time; a lock left by
+# a crash expires in 2 minutes.
 flush() {
-  local spool="$statedir/spool" f ts body
-  [ -d "$spool" ] || return 0
+  local spool="$statedir/spool" f ts body note
+  [ -d "$spool" ] && [ -z "$(quiet_left)" ] || return 0
   [ -z "$(find "$statedir/spool.lock" -maxdepth 0 -mmin +2 2>/dev/null)" ] || rmdir "$statedir/spool.lock" 2>/dev/null
   mkdir "$statedir/spool.lock" 2>/dev/null || return 0
   for f in $(ls -1 "$spool" | grep '\.json$' | sort); do
     ts=${f%%-*}
     if [ $(($(date +%s) - ts)) -gt 86400 ]; then rm -f "$spool/$f"; continue; fi
-    body=$(jq -c --arg note "$(word late "$(clock "$ts")")" '.message += "\n" + $note' "$spool/$f" 2>/dev/null) ||
+    case "$f" in (*-quiet.json) note=$(word held "$(clock "$ts")") ;; (*) note=$(word late "$(clock "$ts")") ;; esac
+    body=$(jq -c --arg note "$note" '.message += "\n" + $note' "$spool/$f" 2>/dev/null) ||
       { rm -f "$spool/$f"; continue; }
     send_json "$body" || break
     rm -f "$spool/$f"
@@ -317,6 +369,7 @@ confirm() {
   now=$(date +%s)
   pane_context "$pane"
   agent=$(jq -r '.agent // "agent"' <<<"$agent_json")
+  case " $(conf_get agent_skip) " in (*" $agent "*) return 0 ;; esac
   session=$(jq -r '.agent_session.value // empty' <<<"$agent_json")
   title=$(jq -r '.terminal_title_stripped // empty' <<<"$agent_json")
   [ "$title" != "$agent" ] || title=""
@@ -486,7 +539,7 @@ case "$cmd" in
 (confirm) confirm "$@" ;;
 (run) run "$@" ;;
 (send) send "$@" ;;
-(test) publish "$(word test)" "$(word test-body "$(hostname -s 2>/dev/null || hostname)")" 3 "bell" &&
+(test) loud=1 publish "$(word test)" "$(word test-body "$(hostname -s 2>/dev/null || hostname)")" 3 "bell" &&
   echo "sent to ${url%/}/$topic" ;;
 (shell-init) shell_init "$@" ;;
 (shell-done) shell_done "$@" ;;

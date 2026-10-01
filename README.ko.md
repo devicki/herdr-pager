@@ -81,7 +81,7 @@ iOS에서 쓰려면 `upstream-base-url: "https://ntfy.sh"`를 유지하세요. �
 ### 2. 플러그인 (계정마다)
 
 ```sh
-herdr plugin install devicki/herdr-pager --ref v0.6.0
+herdr plugin install devicki/herdr-pager --ref v0.7.0
 ```
 
 설치하면 바로 동작해요. 재시작할 필요 없어요. 처음 실행될 때 스크립트, cron, 셸 훅에서 쓸 수 있게 `herdr-pager` 명령을 `~/.local/bin`에 연결해 둬요.
@@ -155,6 +155,11 @@ herdr-pager shell-init fish | source
 | `prompt_chars` | 600 | 같은 방식으로, 답을 기다리는 에이전트의 질문 화면 |
 | `command_chars` | 300 | 같은 방식으로, 명령줄 |
 | `error_chars` | 600 | 같은 방식으로, 실패한 명령의 에러 출력 |
+| `quiet_hours` | 없음(하루 종일 알림) | 방해금지 시간. `00:00-08:00`처럼 `HH:MM-HH:MM`으로 써요. 이 시간에는 알림을 보내지 않아요 |
+| `quiet_mode` | `hold` | `hold`: 방해금지 시간이 끝나면 모아 둔 알림을 보내요. `drop`: 버려요 |
+| `agent_skip` | 없음 | 알림을 받지 않을 에이전트. Herdr가 보여 주는 이름으로 써요: `codex devin` |
+
+방해금지 시간은 폰이나 ntfy 서버가 아니라 pager가 돌아가는 컴퓨터의 시계(`date`)를 따르고, 자정을 넘겨도 돼요(`23:00-07:00`). `hold`면 모아 둔 알림을 시간이 끝나는 즉시 `🌙 03:12 알림이에요 (방해금지 시간이라 늦게 전달)` 표시와 함께 보내요. `herdr-pager test`는 방해금지 시간에도 보내요.
 
 ntfy는 4096바이트가 넘는 메시지를 첨부 파일로 바꾸고, 한글은 한 글자가 3바이트예요. 그래서 메시지 전체가 한글 1,300자쯤을 넘지 않게 잡으세요.
 
@@ -171,7 +176,7 @@ ntfy는 4096바이트가 넘는 메시지를 첨부 파일로 바꾸고, 한글�
 Herdr에는 업데이트 명령이 없어서, 새 태그로 다시 설치하면 돼요. 다시 설치해도 `pager.conf`와 켜짐/꺼짐 상태는 그대로 남아요.
 
 ```sh
-herdr plugin install devicki/herdr-pager --ref v0.6.0 --yes
+herdr plugin install devicki/herdr-pager --ref v0.7.0 --yes
 herdr plugin uninstall devicki.pager
 ```
 
@@ -181,7 +186,7 @@ herdr plugin uninstall devicki.pager
 
 ```sh
 herdr plugin link .
-./test.sh   # 격리된 Herdr와 가짜 ntfy로 완료, 깜빡임, 대기, 명령, 셸 훅 필터, 비밀값 가림, 재전송 대기열, Claude agent view를 확인해요
+./test.sh   # 격리된 Herdr와 가짜 ntfy로 완료, 깜빡임, 대기, 명령, 셸 훅 필터, 비밀값 가림, 재전송 대기열, Claude agent view, 방해금지 시간, agent_skip을 확인해요
 ```
 
 릴리스할 때는 `herdr-plugin.toml`의 `version`을 올리고, 두 README의 `--ref`를 바꿔 커밋한 뒤 `git tag -a vX.Y.Z -m vX.Y.Z && git push origin vX.Y.Z`를 실행하세요.

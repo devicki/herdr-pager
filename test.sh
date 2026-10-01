@@ -44,7 +44,7 @@ EOF
 port=$((20000 + RANDOM % 20000))
 python3 "$work/ntfy.py" "$port" "$work/received.jsonl" &
 ntfy=$!
-printf 'url = http://127.0.0.1:%s\ntopic = t\nlabel = test   # a note\ndone_delay = 2\nblocked_delay = 2\n' "$port" \
+printf 'url = http://127.0.0.1:%s\ntopic = t\nlabel = test   # a note\ndone_delay = 2\nblocked_delay = 2\nagent_skip = codex\n' "$port" \
   >"$work/home/.config/herdr/plugins/config/devicki.pager/pager.conf"
 
 h plugin link "$here" >/dev/null
@@ -67,6 +67,11 @@ check "waiting for you is reported once, high priority" 1 '(.title | test("needs
 # Idle without a working stretch before it (Unknown -> Idle) is not a finished turn.
 say idle 3
 check "idle after a wait is not a finished turn" 1 '.title | test("done")'
+# An agent in agent_skip is never reported.
+k=$(h pane split "$p" --direction down --no-focus | jq -r .result.pane.pane_id)
+h pane report-agent "$k" --source test --agent codex --state working >/dev/null; sleep 0.5
+h pane report-agent "$k" --source test --agent codex --state idle >/dev/null; sleep 3.5
+check "agent_skip = codex: codex is not reported" 0 '.title | test("codex")'
 
 # Claude's agent view has no session of its own: a finished turn is reported with the background
 # session that just finished, by its name and reply. A session open in a pane is not that one.
@@ -121,6 +126,26 @@ env HERDR_PLUGIN_CONFIG_DIR="$work/down" HERDR_PLUGIN_STATE_DIR="$work/state" ba
 "${cli[@]}" send -t "back up" "next"
 sleep 0.5
 check "a message the server missed is resent, marked late" 1 '.title == "[test] while down" and (.message | test("delivered late"))'
+
+# Quiet hours (here: from a minute ago to two minutes on): nothing goes out but a test. hold keeps a
+# message for their end, then sends it marked; drop discards it.
+mkdir -p "$work/quiet"
+qconf() { printf 'url = http://127.0.0.1:%s\ntopic = t\nlabel = test\n%b' "$port" "$1" >"$work/quiet/pager.conf"; }
+qcli=(env HERDR_PLUGIN_CONFIG_DIR="$work/quiet" HERDR_PLUGIN_STATE_DIR="$work/qstate" bash "$here/bin/herdr-pager")
+q=$(python3 -c 'import datetime as d; n = d.datetime.now(); f = lambda m: (n + d.timedelta(minutes=m)).strftime("%H:%M"); print(f(-1) + "-" + f(2))')
+qconf "quiet_hours = $q\n"
+"${qcli[@]}" send -t "at night" "held" 2>/dev/null
+"${qcli[@]}" test >/dev/null
+qconf "quiet_hours = $q\nquiet_mode = drop\n"
+"${qcli[@]}" send -t "dropped" "gone" 2>/dev/null
+sleep 0.5
+check "quiet hours: nothing is sent meanwhile" 0 '.title == "[test] at night" or .title == "[test] dropped"'
+check "  but a test still goes out" 1 '.title == "[test] herdr-pager test"'
+qconf ""
+"${qcli[@]}" flush
+sleep 0.5
+check "  when they end, what they held is sent, marked" 1 '.title == "[test] at night" and (.message | test("🌙"))'
+check "  quiet_mode = drop: never sent" 0 '.title == "[test] dropped"'
 
 # The same, in Korean (lang = ko).
 mkdir -p "$work/ko"

@@ -81,7 +81,7 @@ For iOS, keep `upstream-base-url: "https://ntfy.sh"`: iPhones only get instant p
 ### 2. The plugin, in each account
 
 ```sh
-herdr plugin install devicki/herdr-pager --ref v0.6.0
+herdr plugin install devicki/herdr-pager --ref v0.7.0
 ```
 
 It starts working at once; no restart is needed. It also links the `herdr-pager` command into `~/.local/bin` the first time it runs, for scripts, cron and the shell hook.
@@ -154,6 +154,11 @@ Any command that runs `shell_threshold` seconds or longer (default 60) is report
 | `prompt_chars` | 600 | the same, for the prompt of a waiting agent |
 | `command_chars` | 300 | the same, for a command line |
 | `error_chars` | 600 | the same, for a failed command's error output |
+| `quiet_hours` | none (all day) | quiet hours, `HH:MM-HH:MM`, such as `00:00-08:00`; nothing is sent then |
+| `quiet_mode` | `hold` | `hold`: send what quiet hours held when they end; `drop`: discard it |
+| `agent_skip` | none | agents never reported, by the name Herdr shows: `codex devin` |
+
+Quiet hours follow this machine's clock (`date`), not the phone's or the ntfy server's, and may span midnight (`23:00-07:00`). With `hold`, each message held goes out when they end, marked `🌙 From 03:12; held for quiet hours.`; `herdr-pager test` always goes out.
 
 ntfy turns a message over 4096 bytes into an attachment, and Korean takes 3 bytes a character, so keep a whole message under about 1,300 Korean characters.
 
@@ -170,7 +175,7 @@ ntfy turns a message over 4096 bytes into an attachment, and Korean takes 3 byte
 Herdr has no update command; reinstall at the new tag. `pager.conf` and the enabled state survive a reinstall.
 
 ```sh
-herdr plugin install devicki/herdr-pager --ref v0.6.0 --yes
+herdr plugin install devicki/herdr-pager --ref v0.7.0 --yes
 herdr plugin uninstall devicki.pager
 ```
 
@@ -180,7 +185,7 @@ Uninstalling leaves `pager.conf` in the config directory and the `~/.local/bin/h
 
 ```sh
 herdr plugin link .
-./test.sh   # isolated Herdr + a stand-in ntfy: agent turns, blips, waits, commands, the shell hook filter, masking, the resend queue, Claude's agent view
+./test.sh   # isolated Herdr + a stand-in ntfy: agent turns, blips, waits, commands, the shell hook filter, masking, the resend queue, Claude's agent view, quiet hours, agent_skip
 ```
 
 To release, bump `version` in `herdr-plugin.toml`, update the `--ref` in both READMEs, commit, then `git tag -a vX.Y.Z -m vX.Y.Z && git push origin vX.Y.Z`.

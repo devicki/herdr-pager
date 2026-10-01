@@ -81,7 +81,7 @@ For iOS, keep `upstream-base-url: "https://ntfy.sh"`: iPhones only get instant p
 ### 2. The plugin, in each account
 
 ```sh
-herdr plugin install devicki/herdr-pager --ref v0.5.0
+herdr plugin install devicki/herdr-pager --ref v0.5.1
 ```
 
 It starts working at once; no restart is needed. It also links the `herdr-pager` command into `~/.local/bin` the first time it runs, for scripts, cron and the shell hook.
@@ -164,7 +164,7 @@ Any command that runs `shell_threshold` seconds or longer (default 60) is report
 Herdr has no update command; reinstall at the new tag. `pager.conf` and the enabled state survive a reinstall.
 
 ```sh
-herdr plugin install devicki/herdr-pager --ref v0.5.0 --yes
+herdr plugin install devicki/herdr-pager --ref v0.5.1 --yes
 herdr plugin uninstall devicki.pager
 ```
 

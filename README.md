@@ -81,7 +81,7 @@ For iOS, keep `upstream-base-url: "https://ntfy.sh"`: iPhones only get instant p
 ### 2. The plugin, in each account
 
 ```sh
-herdr plugin install devicki/herdr-pager --ref v0.7.0
+herdr plugin install devicki/herdr-pager --ref v0.7.1
 ```
 
 It starts working at once; no restart is needed. It also links the `herdr-pager` command into `~/.local/bin` the first time it runs, for scripts, cron and the shell hook.
@@ -149,14 +149,14 @@ Any command that runs `shell_threshold` seconds or longer (default 60) is report
 | `done_delay` | 15 | seconds an agent must stay finished before it is reported |
 | `blocked_delay` | 10 | seconds an agent must keep waiting before it is reported |
 | `shell_threshold` | 60 | shell hook: minimum command duration in seconds |
-| `shell_skip` | interactive tools and agents | shell hook: programs never reported |
+| `shell_skip` | interactive tools and agents | shell hook: programs never reported, separated by spaces or commas |
 | `reply_chars` | 500 | longest agent reply in a message, in characters; longer ones end in `…` |
 | `prompt_chars` | 600 | the same, for the prompt of a waiting agent |
 | `command_chars` | 300 | the same, for a command line |
 | `error_chars` | 600 | the same, for a failed command's error output |
 | `quiet_hours` | none (all day) | quiet hours, `HH:MM-HH:MM`, such as `00:00-08:00`; nothing is sent then |
 | `quiet_mode` | `hold` | `hold`: send what quiet hours held when they end; `drop`: discard it |
-| `agent_skip` | none | agents never reported, by the name Herdr shows: `codex devin` |
+| `agent_skip` | none | agents never reported, by the name Herdr shows, separated by spaces or commas: `codex, devin` |
 
 Quiet hours follow this machine's clock (`date`), not the phone's or the ntfy server's, and may span midnight (`23:00-07:00`). With `hold`, each message held goes out when they end, marked `🌙 From 03:12; held for quiet hours.`; `herdr-pager test` always goes out.
 
@@ -175,7 +175,7 @@ ntfy turns a message over 4096 bytes into an attachment, and Korean takes 3 byte
 Herdr has no update command; reinstall at the new tag. `pager.conf` and the enabled state survive a reinstall.
 
 ```sh
-herdr plugin install devicki/herdr-pager --ref v0.7.0 --yes
+herdr plugin install devicki/herdr-pager --ref v0.7.1 --yes
 herdr plugin uninstall devicki.pager
 ```
 

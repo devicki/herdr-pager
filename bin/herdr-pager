@@ -59,8 +59,9 @@ if [ ! -e "$conf" ] && mkdir -p "$confdir" 2>/dev/null; then
 # quiet_hours = 00:00-08:00
 # quiet_mode = hold
 #
-# Agents never reported, by the name Herdr shows (claude, codex, devin, ...).
-# agent_skip = codex
+# Agents never reported, by the name Herdr shows (claude, codex, devin, ...), separated by spaces
+# or commas.
+# agent_skip = codex, devin
 EOF
 fi
 # A value, without a trailing ` # note` or blanks (a `#` inside a value, as in a color, stays).
@@ -68,6 +69,8 @@ conf_get() {
   [ -f "$conf" ] && sed -n "s/^[[:space:]]*$1[[:space:]]*=[[:space:]]*//p" "$conf" |
     sed -e 's/[[:space:]]#.*$//' -e 's/[[:space:]]*$//' | tail -n1
 }
+# A list setting, its names separated by spaces or commas, as one space-separated line.
+conf_list() { conf_get "$1" | tr ',' ' '; }
 url="${HERDR_PAGER_URL:-$(conf_get url)}"
 topic="${HERDR_PAGER_TOPIC:-$(conf_get topic)}"
 token="${HERDR_PAGER_TOKEN:-$(conf_get token)}"
@@ -369,7 +372,7 @@ confirm() {
   now=$(date +%s)
   pane_context "$pane"
   agent=$(jq -r '.agent // "agent"' <<<"$agent_json")
-  case " $(conf_get agent_skip) " in (*" $agent "*) return 0 ;; esac
+  case " $(conf_list agent_skip) " in (*" $agent "*) return 0 ;; esac
   session=$(jq -r '.agent_session.value // empty' <<<"$agent_json")
   title=$(jq -r '.terminal_title_stripped // empty' <<<"$agent_json")
   [ "$title" != "$agent" ] || title=""
@@ -456,7 +459,7 @@ send() {
 
 shell_done() { # RC SECONDS COMMAND-LINE
   local skip first
-  skip=$(conf_get shell_skip)
+  skip=$(conf_list shell_skip)
   skip=${skip:-vim nvim vi nano emacs hx less more man top htop btop lazygit tig ssh mosh tmux herdr claude codex devin watch tail}
   # The program, past VAR=value, options, numbers and wrappers such as `sudo -E` or `nice -n 5`.
   first=$(printf '%s' "$3" | awk '{ for (i = 1; i <= NF; i++)

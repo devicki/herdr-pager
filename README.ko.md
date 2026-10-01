@@ -81,7 +81,7 @@ iOS에서 쓰려면 `upstream-base-url: "https://ntfy.sh"`를 유지하세요. �
 ### 2. 플러그인 (계정마다)
 
 ```sh
-herdr plugin install devicki/herdr-pager --ref v0.7.0
+herdr plugin install devicki/herdr-pager --ref v0.7.1
 ```
 
 설치하면 바로 동작해요. 재시작할 필요 없어요. 처음 실행될 때 스크립트, cron, 셸 훅에서 쓸 수 있게 `herdr-pager` 명령을 `~/.local/bin`에 연결해 둬요.
@@ -150,14 +150,14 @@ herdr-pager shell-init fish | source
 | `done_delay` | 15 | 완료 상태가 이 시간(초) 동안 이어져야 알림 |
 | `blocked_delay` | 10 | 대기 상태가 이 시간(초) 동안 이어져야 알림 |
 | `shell_threshold` | 60 | 셸 훅: 알릴 최소 실행 시간(초) |
-| `shell_skip` | 대화형 도구와 에이전트 | 셸 훅: 알리지 않을 프로그램 |
+| `shell_skip` | 대화형 도구와 에이전트 | 셸 훅: 알리지 않을 프로그램. 띄어쓰기나 쉼표로 구분해요 |
 | `reply_chars` | 500 | 알림에 넣을 에이전트 답변의 최대 글자 수. 넘으면 `…`로 잘라요 |
 | `prompt_chars` | 600 | 같은 방식으로, 답을 기다리는 에이전트의 질문 화면 |
 | `command_chars` | 300 | 같은 방식으로, 명령줄 |
 | `error_chars` | 600 | 같은 방식으로, 실패한 명령의 에러 출력 |
 | `quiet_hours` | 없음(하루 종일 알림) | 방해금지 시간. `00:00-08:00`처럼 `HH:MM-HH:MM`으로 써요. 이 시간에는 알림을 보내지 않아요 |
 | `quiet_mode` | `hold` | `hold`: 방해금지 시간이 끝나면 모아 둔 알림을 보내요. `drop`: 버려요 |
-| `agent_skip` | 없음 | 알림을 받지 않을 에이전트. Herdr가 보여 주는 이름으로 써요: `codex devin` |
+| `agent_skip` | 없음 | 알림을 받지 않을 에이전트. Herdr가 보여 주는 이름을 띄어쓰기나 쉼표로 구분해 써요: `codex, devin` |
 
 방해금지 시간은 폰이나 ntfy 서버가 아니라 pager가 돌아가는 컴퓨터의 시계(`date`)를 따르고, 자정을 넘겨도 돼요(`23:00-07:00`). `hold`면 모아 둔 알림을 시간이 끝나는 즉시 `🌙 03:12 알림이에요 (방해금지 시간이라 늦게 전달)` 표시와 함께 보내요. `herdr-pager test`는 방해금지 시간에도 보내요.
 
@@ -176,7 +176,7 @@ ntfy는 4096바이트가 넘는 메시지를 첨부 파일로 바꾸고, 한글�
 Herdr에는 업데이트 명령이 없어서, 새 태그로 다시 설치하면 돼요. 다시 설치해도 `pager.conf`와 켜짐/꺼짐 상태는 그대로 남아요.
 
 ```sh
-herdr plugin install devicki/herdr-pager --ref v0.7.0 --yes
+herdr plugin install devicki/herdr-pager --ref v0.7.1 --yes
 herdr plugin uninstall devicki.pager
 ```
 

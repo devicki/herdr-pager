@@ -44,7 +44,7 @@ EOF
 port=$((20000 + RANDOM % 20000))
 python3 "$work/ntfy.py" "$port" "$work/received.jsonl" &
 ntfy=$!
-printf 'url = http://127.0.0.1:%s\ntopic = t\nlabel = test   # a note\ndone_delay = 2\nblocked_delay = 2\nagent_skip = codex\n' "$port" \
+printf 'url = http://127.0.0.1:%s\ntopic = t\nlabel = test   # a note\ndone_delay = 2\nblocked_delay = 2\nagent_skip = devin,codex\n' "$port" \
   >"$work/home/.config/herdr/plugins/config/devicki.pager/pager.conf"
 
 h plugin link "$here" >/dev/null
@@ -71,7 +71,7 @@ check "idle after a wait is not a finished turn" 1 '.title | test("done")'
 k=$(h pane split "$p" --direction down --no-focus | jq -r .result.pane.pane_id)
 h pane report-agent "$k" --source test --agent codex --state working >/dev/null; sleep 0.5
 h pane report-agent "$k" --source test --agent codex --state idle >/dev/null; sleep 3.5
-check "agent_skip = codex: codex is not reported" 0 '.title | test("codex")'
+check "agent_skip = devin,codex: codex is not reported" 0 '.title | test("codex")'
 
 # Claude's agent view has no session of its own: a finished turn is reported with the background
 # session that just finished, by its name and reply. A session open in a pane is not that one.

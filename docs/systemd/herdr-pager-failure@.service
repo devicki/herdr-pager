@@ -6,6 +6,7 @@
 #     OnFailure=herdr-pager-failure@%n.service
 #
 # For system units, install it under /etc/systemd/system and drop `--user` below.
+# $MONITOR_SERVICE_RESULT and $MONITOR_EXIT_STATUS need systemd 251 or newer; older ones leave them empty.
 [Unit]
 Description=Report the failure of %i through herdr-pager
 

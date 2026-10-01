@@ -7,7 +7,8 @@
 #   herdr-pager test                             send a test notification
 #   herdr-pager shell-init bash|zsh|fish         print the hook that reports long commands
 #
-# Internal: event (plugin hook), confirm (delayed agent check), shell-done (shell hook).
+# Internal: event (plugin hook), confirm (delayed agent check), shell-done (shell hook),
+# flush (resend what an unreachable server could not take).
 set -uo pipefail
 
 # herdr runs plugin commands with a minimal PATH; ensure jq and curl resolve on common installs.
@@ -46,8 +47,10 @@ if [ ! -e "$conf" ] && mkdir -p "$confdir" 2>/dev/null; then
 # shell_skip = vim nvim vi nano emacs hx less more man top htop btop lazygit tig ssh mosh tmux herdr claude codex devin watch tail
 EOF
 fi
+# A value, without a trailing ` # note` or blanks (a `#` inside a value, as in a color, stays).
 conf_get() {
-  [ -f "$conf" ] && sed -n "s/^[[:space:]]*$1[[:space:]]*=[[:space:]]*//p" "$conf" | tail -n1
+  [ -f "$conf" ] && sed -n "s/^[[:space:]]*$1[[:space:]]*=[[:space:]]*//p" "$conf" |
+    sed -e 's/[[:space:]]#.*$//' -e 's/[[:space:]]*$//' | tail -n1
 }
 url="${HERDR_PAGER_URL:-$(conf_get url)}"
 topic="${HERDR_PAGER_TOPIC:-$(conf_get topic)}"
@@ -66,12 +69,14 @@ word() {
   (ko:failed) echo "실패 (종료 코드 $2)" ;;
   (ko:test) echo "herdr-pager 테스트" ;;
   (ko:test-body) echo "$2의 알림이 이 채널로 잘 와요." ;;
+  (ko:late) echo "🕒 $2에 보내려던 알림이에요 (서버 연결이 끊겨 늦게 전달)" ;;
   (*:done) echo "done" ;;
   (*:needs) echo "needs you" ;;
   (*:finished) echo "finished" ;;
   (*:failed) echo "failed (exit $2)" ;;
   (*:test) echo "herdr-pager test" ;;
   (*:test-body) echo "Notifications from $2 reach this topic." ;;
+  (*:late) echo "🕒 Meant for $2; delivered late because the server was unreachable." ;;
   esac
 }
 
@@ -80,32 +85,73 @@ line() { [ -z "$2" ] || printf '%s %s\n' "$1" "$(printf '%s' "$2" | sed '2,$s/^/
 
 # Mask what looks like a credential before it leaves the machine.
 redact() {
+  awk '/-----BEGIN [A-Z ]*PRIVATE KEY-----/ { print "[redacted private key]"; skip = 1; next }
+       skip { if (/-----END [A-Z ]*PRIVATE KEY-----/) skip = 0; next } { print }' |
   sed -E \
     -e 's/(sk|pk|rk)-[A-Za-z0-9_-]{16,}/[redacted]/g' \
+    -e 's/(sk|pk|rk)_(live|test)_[A-Za-z0-9]{10,}/[redacted]/g' \
+    -e 's/AIza[0-9A-Za-z_-]{30,}/[redacted]/g' \
+    -e 's/(glpat|gldt|glrt)-[A-Za-z0-9_-]{20,}/[redacted]/g' \
+    -e 's/npm_[A-Za-z0-9]{30,}/[redacted]/g' \
+    -e 's/pypi-[A-Za-z0-9_-]{40,}/[redacted]/g' \
     -e 's/(gh[pousr]|github_pat)_[A-Za-z0-9_]{20,}/[redacted]/g' \
     -e 's/xox[abprs]-[A-Za-z0-9-]{10,}/[redacted]/g' \
     -e 's/AKIA[0-9A-Z]{16}/[redacted]/g' \
     -e 's/tk_[A-Za-z0-9]{20,}/[redacted]/g' \
     -e 's/eyJ[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{10,}/[redacted]/g' \
-    -e 's/(([Pp]ass(word|wd)?|PASS(WORD|WD)?|[Ss]ecret|SECRET|[Tt]oken|TOKEN|[Aa]pi[_-]?[Kk]ey|API[_-]?KEY)[[:space:]]*[:=][[:space:]]*)[^[:space:]]+/\1[redacted]/g'
+    -e 's/([A-Za-z0-9_]*([Pp]ass(word|wd)?|PASS(WORD|WD)?|[Ss]ecret|SECRET|[Tt]oken|TOKEN|[Aa]pi[_-]?[Kk]ey|API[_-]?KEY)[A-Za-z0-9_]*[[:space:]]*[:=][[:space:]]*)[^[:space:]]+/\1[redacted]/g'
+}
+
+# send_json BODY: one POST. The token goes to curl on stdin, never into `ps`.
+send_json() {
+  { [ -z "$token" ] || printf 'header = "Authorization: Bearer %s"\n' "$token"; } |
+    curl -fsS --max-time 10 --retry 2 --retry-delay 2 -K - -H 'Content-Type: application/json' \
+      --data-binary "$1" "${url%/}/" >/dev/null 2>&1
 }
 
 # publish TITLE MESSAGE [PRIORITY] [TAGS,...]
-# The token goes to curl on stdin, not in its arguments, so it never shows up in `ps`.
+# A message the server does not take is queued and sent later (see flush), not lost.
 publish() {
   if [ -z "$url" ] || [ -z "$topic" ]; then
     echo "herdr-pager: set url and topic in $conf" >&2
     return 1
   fi
-  local body title=$1
+  local body title=$1 spool="$statedir/spool" n
   # Every title carries the label, to tell machines and accounts apart in one list.
-  case "$title" in ("[$label]"*) ;; (*) title="[$label] $title" ;; esac
+  [ "${title#"[$label]"}" != "$title" ] || title="[$label] $title"
   body=$(jq -n --arg topic "$topic" --arg title "$title" --arg message "$2" --argjson priority "${3:-3}" --arg tags "${4:-}" \
     '{topic: $topic, title: $title, message: $message, priority: $priority}
      + (if $tags != "" then {tags: ($tags | split(","))} else {} end)') || return 1
-  { [ -z "$token" ] || printf 'header = "Authorization: Bearer %s"\n' "$token"; } |
-    curl -fsS --max-time 10 --retry 2 --retry-delay 2 -K - -H 'Content-Type: application/json' \
-      --data-binary "$body" "${url%/}/" >/dev/null
+  if send_json "$body"; then
+    [ ! -d "$spool" ] || flush
+    return 0
+  fi
+  mkdir -p "$spool" && printf '%s\n' "$body" >"$spool/$(date +%s)-$$-${RANDOM:-0}.json" || return 1
+  # Keep the newest 100.
+  n=$(ls -1 "$spool" | grep -c '\.json$')
+  [ "$n" -le 100 ] || ls -1 "$spool" | grep '\.json$' | sort | head -n $((n - 100)) | while IFS= read -r f; do rm -f "$spool/$f"; done
+  echo "herdr-pager: ${url%/} did not answer; queued to retry" >&2
+  return 1
+}
+
+clock() { date -d "@$1" +%H:%M 2>/dev/null || date -r "$1" +%H:%M; }
+
+# Resend queued messages, oldest first, each marked with the time it was meant for; drop
+# anything over a day old. One flusher at a time; a lock left by a crash expires in 2 minutes.
+flush() {
+  local spool="$statedir/spool" f ts body
+  [ -d "$spool" ] || return 0
+  [ -z "$(find "$statedir/spool.lock" -maxdepth 0 -mmin +2 2>/dev/null)" ] || rmdir "$statedir/spool.lock" 2>/dev/null
+  mkdir "$statedir/spool.lock" 2>/dev/null || return 0
+  for f in $(ls -1 "$spool" | grep '\.json$' | sort); do
+    ts=${f%%-*}
+    if [ $(($(date +%s) - ts)) -gt 86400 ]; then rm -f "$spool/$f"; continue; fi
+    body=$(jq -c --arg note "$(word late "$(clock "$ts")")" '.message += "\n" + $note' "$spool/$f" 2>/dev/null) ||
+      { rm -f "$spool/$f"; continue; }
+    send_json "$body" || break
+    rm -f "$spool/$f"
+  done
+  rmdir "$statedir/spool.lock" 2>/dev/null || :
 }
 
 duration() {
@@ -128,7 +174,12 @@ pane_context() {
   ws=$("$H" workspace get "$(jq -r '.workspace_id // empty' <<<"$agent_json")" 2>/dev/null | jq -r '.result.workspace.label // empty')
   tab=$("$H" tab get "$(jq -r '.tab_id // empty' <<<"$agent_json")" 2>/dev/null | jq -r '.result.tab.label // empty')
   where="${ws:-?}${tab:+ › $tab}"
-  jump="herdr${HERDR_SESSION:+ --session $HERDR_SESSION} agent focus $pane"
+  # A named session lives under .../sessions/<name>/; the default one does not.
+  hs=${HERDR_SESSION:-}
+  if [ -z "$hs" ]; then
+    case "${HERDR_SOCKET_PATH:-}" in (*/sessions/*/*) hs=$(basename "$(dirname "$HERDR_SOCKET_PATH")") ;; esac
+  fi
+  jump="herdr${hs:+ --session $hs} agent focus $pane"
 }
 
 # Phones show ntfy messages as plain text: drop Markdown emphasis and heading marks.
@@ -161,9 +212,11 @@ clip() { # max-chars: trim stdin to a length ntfy shows comfortably
 
 lock() { # name; a mkdir lock works the same on Linux and macOS
   local i=0
+  mkdir -p "$statedir" 2>/dev/null
   while ! mkdir "$statedir/$1.lock" 2>/dev/null; do
     i=$((i + 1))
-    [ "$i" -lt 50 ] || { rm -rf "$statedir/$1.lock"; continue; } # a lock older than ~5s is stale
+    [ "$i" -ne 50 ] || rm -rf "$statedir/$1.lock" # held ~5s: left by a crash
+    [ "$i" -lt 100 ] || return 0                  # cannot lock at all: go on without it
     sleep 0.1
   done
 }
@@ -195,6 +248,8 @@ event() {
   esac
   printf '%s %s %s\n' "$status" "$gen" "$since" >"$statedir/$key"
   unlock "$key"
+  # Something queued while the server was away: try again, off the hook's back.
+  [ -z "$(ls "$statedir/spool" 2>/dev/null)" ] || nohup bash "$self" flush </dev/null >/dev/null 2>&1 &
 }
 
 # Check again after the delay, detached so the hook returns at once.
@@ -203,14 +258,16 @@ later() { # pane kind gen
 }
 
 confirm() {
-  local pane=$1 kind=$2 want=$3 key delay now cur sent="" agent session title note body excerpt ws="" tab="" where="" jump=""
+  local pane=$1 kind=$2 want=$3 key delay now cur sent="" agent session title note body excerpt ws="" tab="" where="" jump="" hs=""
   key=$(printf %s "${HERDR_SOCKET_PATH:-}#$pane" | cksum | cut -d' ' -f1)
   delay=$(conf_get "${kind}_delay")
-  sleep "${delay:-$([ "$kind" = done ] && echo 15 || echo 10)}"
-  cur=$("$H" agent get "$pane" 2>/dev/null | jq -r '.result.agent.agent_status // empty')
-  case "$kind:$cur" in (done:idle | done:done | blocked:blocked) ;; (*) return 0 ;; esac
-  # Claim before sending, under the lock, so concurrent checks never send twice.
+  case "$delay" in ('' | *[!0-9]*) delay=$([ "$kind" = done ] && echo 15 || echo 10) ;; esac
+  sleep "$delay"
+  # Claim before sending, under the lock, so concurrent checks never send twice; the state is
+  # read again inside it. A send that fails is queued by publish, so a claim never loses one.
   lock "$key"
+  cur=$("$H" agent get "$pane" 2>/dev/null | jq -r '.result.agent.agent_status // empty')
+  case "$kind:$cur" in (done:idle | done:done | blocked:blocked) ;; (*) unlock "$key"; return 0 ;; esac
   read_state "$key"
   [ ! -f "$statedir/$key.sent" ] || read -r sent <"$statedir/$key.sent" || :
   if [ "$gen" != "$want" ] || [ "$sent" = "$want" ]; then unlock "$key"; return 0; fi
@@ -242,13 +299,14 @@ confirm() {
 
 # ---- Commands, scripts and scheduled jobs -----------------------------------------------------
 
-# report RC SECONDS TITLE-OVERRIDE NAME COMMAND-LINE
+# report RC SECONDS TITLE-OVERRIDE NAME COMMAND-LINE [ERROR-TAIL]
 report() {
-  local rc=$1 secs=$2 t=$3 name=$4 cmdline=$5 body ws="" tab="" where="" jump=""
+  local rc=$1 secs=$2 t=$3 name=$4 cmdline=$5 errtail=${6:-} body ws="" tab="" where="" jump="" hs=""
   if [ -n "${HERDR_PANE_ID:-}" ] && command -v "$H" >/dev/null 2>&1; then
     pane_context "$HERDR_PANE_ID" 2>/dev/null || :
   fi
   body=$(line 💻 "$(printf '%s' "$cmdline" | redact | clip 300)"
+    [ "$rc" -eq 0 ] || line ⚠️ "$(printf '%s' "$errtail" | redact | clip 600)"
     printf '⏱ %s  📁 %s' "$(duration "$secs")" "$(pwd | sed "s|^$HOME|~|")"
     [ -z "$where" ] || printf '\n📂 %s\n📍 %s  ↩ %s' "$where" "$HERDR_PANE_ID" "$jump")
   if [ "$rc" -eq 0 ]; then
@@ -259,7 +317,7 @@ report() {
 }
 
 run() {
-  local t="" quiet=false start rc
+  local t="" quiet=false start rc err errtail=""
   while [ $# -gt 0 ]; do
     case "$1" in
     (-t) t=$2; shift 2 ;;
@@ -269,10 +327,18 @@ run() {
     esac
   done
   [ $# -gt 0 ] || { echo "usage: herdr-pager run [-t TITLE] [-q] -- CMD..." >&2; return 2; }
+  # stderr still reaches the terminal, through tee, so a failure can quote its last lines.
+  err=$(mktemp "${TMPDIR:-/tmp}/herdr-pager.XXXXXX") || err=""
   start=$(date +%s)
-  "$@"
-  rc=$?
-  { [ "$rc" -eq 0 ] && [ "$quiet" = true ]; } || report "$rc" $(($(date +%s) - start)) "$t" "$(basename "$1")" "$*" || :
+  if [ -n "$err" ]; then
+    { "$@" 2>&1 1>&3 3>&- | tee "$err" >&2 3>&-; rc=${PIPESTATUS[0]}; } 3>&1
+    [ "$rc" -eq 0 ] || errtail=$(tail -n 8 "$err")
+    rm -f "$err"
+  else
+    "$@"
+    rc=$?
+  fi
+  { [ "$rc" -eq 0 ] && [ "$quiet" = true ]; } || report "$rc" $(($(date +%s) - start)) "$t" "$(basename "$1")" "$*" "$errtail" || :
   return "$rc"
 }
 
@@ -287,14 +353,17 @@ send() {
     esac
   done
   if [ $# -gt 0 ]; then msg="$*"; else msg=$(cat); fi
-  publish "$t" "$(printf '%s' "$msg" | redact)" "$p" "$g"
+  publish "$t" "$(printf '%s' "$msg" | redact | clip 4000)" "$p" "$g"
 }
 
 shell_done() { # RC SECONDS COMMAND-LINE
   local skip first
   skip=$(conf_get shell_skip)
   skip=${skip:-vim nvim vi nano emacs hx less more man top htop btop lazygit tig ssh mosh tmux herdr claude codex devin watch tail}
-  first=$(printf '%s' "$3" | awk '{ for (i = 1; i <= NF; i++) if ($i !~ /=/ && $i != "sudo" && $i != "time" && $i != "env") { print $i; exit } }')
+  # The program, past VAR=value, options, numbers and wrappers such as `sudo -E` or `nice -n 5`.
+  first=$(printf '%s' "$3" | awk '{ for (i = 1; i <= NF; i++)
+    if ($i !~ /=/ && $i !~ /^-/ && $i !~ /^[0-9]+$/ &&
+        $i !~ /^(sudo|doas|time|env|nice|nohup|command|exec|stdbuf|ionice|chrt|taskset|caffeinate)$/) { print $i; exit } }')
   first=$(basename "${first:-x}")
   case " $skip " in (*" $first "*) return 0 ;; esac
   report "$1" "$2" "" "$first" "$3"
@@ -366,7 +435,8 @@ fi
 cmd="${1:-help}"
 [ $# -eq 0 ] || shift
 case "$cmd" in
-(init) : ;;
+(init) [ ! -d "$statedir/spool" ] || nohup bash "$self" flush </dev/null >/dev/null 2>&1 & ;;
+(flush) flush ;;
 (event) event ;;
 (confirm) confirm "$@" ;;
 (run) run "$@" ;;

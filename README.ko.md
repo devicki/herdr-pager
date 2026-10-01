@@ -30,12 +30,14 @@
 | --- | --- | --- | --- |
 | 에이전트 작업 완료 | 작업 중이던 에이전트가 idle(또는 `done`)이 되고 `done_delay`초 동안 그대로일 때 | 3 | 세션 제목, 에이전트의 마지막 답변(Claude Code·Codex 대화 기록), 걸린 시간, 페인 |
 | 에이전트가 답을 기다림 | `blocked` 상태가 `blocked_delay`초 동안 이어질 때. 같은 대기에는 한 번만 | 4 | 페인 아래쪽에 뜬 질문, 페인 |
-| 명령 종료 | `herdr-pager run -- 명령`, 또는 셸 훅을 켰을 때 `shell_threshold`초 넘게 걸린 명령 | 3, 실패하면 4 | 명령줄, 종료 코드, 걸린 시간, 호스트와 폴더, 페인 |
+| 명령 종료 | `herdr-pager run -- 명령`, 또는 셸 훅을 켰을 때 `shell_threshold`초 넘게 걸린 명령 | 3, 실패하면 4 | 명령줄, 종료 코드, 걸린 시간, 호스트와 폴더, 페인. `run`이 실패하면 에러 출력의 마지막 몇 줄도 |
 | 그 밖의 알림 | cron, systemd, CI 등에서 `herdr-pager send` | 원하는 대로 | 내 메시지 |
 
-모든 제목은 `label`(기본값: 사용자 이름)로 시작해서, 여러 머신이나 계정의 알림이 한 목록에 섞여도 구분돼요. 잠금 화면에서 읽기 좋게 제목은 짧게(에이전트와 워크스페이스) 두고, 본문은 탭과 세션 제목으로 시작해 페인 id와 `herdr agent focus` 명령으로 끝나요. 폰 앱은 일반 텍스트로 보여 주기 때문에 답변의 Markdown 강조는 풀어서 보내요.
+모든 제목은 `label`(기본값: 사용자 이름)로 시작해서, 여러 머신이나 계정의 알림이 한 목록에 섞여도 구분돼요. 잠금 화면에서 읽기 좋게 제목은 짧게(에이전트와 워크스페이스) 두고, 본문은 탭과 세션 제목으로 시작해 페인 id와 `herdr agent focus` 명령으로 끝나요(named session에서는 `--session`이 붙어요). 폰 앱은 일반 텍스트로 보여 주기 때문에 답변의 Markdown 강조는 풀어서 보내요.
 
 짧은 깜빡임은 보내지 않아요. 에이전트가 턴 중간에 잠깐 멈추거나 대기 시간 안에 바로 답한 경우에는 알림이 가지 않아요. Herdr가 같은 이벤트를 여러 번 보내도 한 번의 완료나 대기는 한 번만 알려요.
+
+서버에 연결할 수 없으면 알림을 플러그인 상태 폴더에 보관했다가, 다음 알림이 전달될 때나 다음 에이전트 이벤트 때 원래 보내려던 시각을 붙여 다시 보내요. 하루가 지난 알림은 버려요.
 
 ## 구성
 
@@ -50,7 +52,7 @@ cron, systemd, 스크립트 ─(herdr-pager run)┘                     채널 a
 
 ## 설치
 
-Linux와 macOS에서 동작하고 `bash`(3.2로 충분해요), `jq`, `curl`이 필요해요.
+Linux와 macOS에서 동작하고 `bash`(3.2로 충분해요), `jq` 1.6 이상, `curl`이 필요해요.
 
 ### 1. ntfy 서버 (한 번만)
 
@@ -78,7 +80,7 @@ iOS에서 쓰려면 `upstream-base-url: "https://ntfy.sh"`를 유지하세요. �
 ### 2. 플러그인 (계정마다)
 
 ```sh
-herdr plugin install devicki/herdr-pager --ref v0.3.0
+herdr plugin install devicki/herdr-pager --ref v0.4.0
 ```
 
 설치하면 바로 동작해요. 재시작할 필요 없어요. 처음 실행될 때 스크립트, cron, 셸 훅에서 쓸 수 있게 `herdr-pager` 명령을 `~/.local/bin`에 연결해 둬요.
@@ -95,7 +97,7 @@ label = work
 lang = ko
 ```
 
-파일은 본인만 읽게(`chmod 600`) 두세요. 토큰은 명령줄에 드러나지 않게 전달돼요. 환경 변수 `HERDR_PAGER_URL`, `HERDR_PAGER_TOPIC`, `HERDR_PAGER_TOKEN`이 있으면 파일보다 우선해요.
+`#` 뒤는 주석이에요. 한 줄 전체로 써도 되고 값 뒤에 붙여도 돼요. 파일은 본인만 읽게(`chmod 600`) 두세요. 토큰은 명령줄에 드러나지 않게 전달돼요. 환경 변수 `HERDR_PAGER_URL`, `HERDR_PAGER_TOPIC`, `HERDR_PAGER_TOKEN`이 있으면 파일보다 우선해요.
 
 ### 4. 확인
 
@@ -121,7 +123,7 @@ cron에서도 그대로 써요(`jq`, `curl`을 찾도록 `herdr-pager`가 `PATH`
 0 3 * * * $HOME/.local/bin/herdr-pager run -q -t "nightly backup" -- /opt/backup/run.sh
 ```
 
-systemd: [`docs/systemd/herdr-pager-failure@.service`](docs/systemd/herdr-pager-failure@.service)는 실패한 유닛을 로그 끝부분과 함께 알려 줘요. `~/.config/systemd/user/`에 복사하고, 지켜볼 유닛에 `OnFailure=herdr-pager-failure@%n.service`를 추가하세요.
+systemd: [`docs/systemd/herdr-pager-failure@.service`](docs/systemd/herdr-pager-failure@.service)는 실패한 유닛을 로그 끝부분과 함께 알려 줘요. `~/.config/systemd/user/`에 복사하고, 지켜볼 유닛에 `OnFailure=herdr-pager-failure@%n.service`를 추가하세요. 제목에 실패 이유와 종료 코드가 나오려면 systemd 251 이상이 필요해요.
 
 ### 래퍼 없이 오래 걸린 셸 명령 알림
 
@@ -155,14 +157,14 @@ herdr-pager shell-init fish | source
 - **밖으로 나가는 내용:** 에이전트의 마지막 답변과 대기 중인 페인의 아래쪽 화면이 ntfy 서버로 가요. 흔한 인증 정보 형태(API 키, 토큰, `password=` 값)는 가리고 몇백 자로 자르지만, 에이전트가 비밀값을 출력하지 않게 주의하세요.
 - **글로 된 질문:** 권한 창 없이 답변 속에서 질문하면 "대기"가 아니라 "완료"로 알려요. 어느 쪽이든 답변 내용은 알림에 들어 있어요.
 - **에이전트 종류:** Herdr가 추적하는 에이전트는 모두 알려요. 마지막 답변은 Claude Code와 Codex 대화 기록에서 읽고, 다른 에이전트는 세션 제목만 보여요.
-- Herdr의 이벤트 훅에는 타임아웃이 없어서, 지연 확인은 분리된 프로세스로 돌리고 모든 요청은 10초로 제한해요.
+- Herdr의 이벤트 훅에는 타임아웃이 없어서, 지연 확인은 분리된 프로세스로 돌려요. 전송 시도 한 번은 10초로 제한하고, 시간 초과나 서버 오류일 때 두 번 다시 시도해서 최대 35초쯤 뒤에 포기하고 보관해 둬요.
 
 ## 업데이트와 삭제
 
 Herdr에는 업데이트 명령이 없어서, 새 태그로 다시 설치하면 돼요. 다시 설치해도 `pager.conf`와 켜짐/꺼짐 상태는 그대로 남아요.
 
 ```sh
-herdr plugin install devicki/herdr-pager --ref v0.3.0 --yes
+herdr plugin install devicki/herdr-pager --ref v0.4.0 --yes
 herdr plugin uninstall devicki.pager
 ```
 
@@ -172,7 +174,7 @@ herdr plugin uninstall devicki.pager
 
 ```sh
 herdr plugin link .
-./test.sh   # 격리된 Herdr와 가짜 ntfy로 완료, 깜빡임, 대기, 명령, 셸 훅 필터, 비밀값 가림을 확인해요
+./test.sh   # 격리된 Herdr와 가짜 ntfy로 완료, 깜빡임, 대기, 명령, 셸 훅 필터, 비밀값 가림, 재전송 대기열을 확인해요
 ```
 
 릴리스할 때는 `herdr-plugin.toml`의 `version`을 올리고, 두 README의 `--ref`를 바꿔 커밋한 뒤 `git tag -a vX.Y.Z -m vX.Y.Z && git push origin vX.Y.Z`를 실행하세요.

@@ -44,7 +44,7 @@ EOF
 port=$((20000 + RANDOM % 20000))
 python3 "$work/ntfy.py" "$port" "$work/received.jsonl" &
 ntfy=$!
-printf 'url = http://127.0.0.1:%s\ntopic = t\nlabel = test\ndone_delay = 2\nblocked_delay = 2\n' "$port" \
+printf 'url = http://127.0.0.1:%s\ntopic = t\nlabel = test   # a note\ndone_delay = 2\nblocked_delay = 2\n' "$port" \
   >"$work/home/.config/herdr/plugins/config/devicki.pager/pager.conf"
 
 h plugin link "$here" >/dev/null
@@ -70,7 +70,7 @@ check "idle after a wait is not a finished turn" 1 '.title | test("done")'
 # Commands and jobs, through the CLI.
 cli=(env HERDR_PLUGIN_CONFIG_DIR="$work/home/.config/herdr/plugins/config/devicki.pager"
   HERDR_PLUGIN_STATE_DIR="$work/state" bash "$here/bin/herdr-pager")
-"${cli[@]}" run -- sh -c 'exit 3'
+"${cli[@]}" run -- sh -c 'echo "boom: disk full" >&2; exit 3' 2>/dev/null
 [ $? -eq 3 ] || { echo "FAIL run did not pass the exit code through" >&2; fail=1; }
 "${cli[@]}" run -q -- true
 "${cli[@]}" run -t "nightly backup" -- true
@@ -78,12 +78,20 @@ cli=(env HERDR_PLUGIN_CONFIG_DIR="$work/home/.config/herdr/plugins/config/devick
 "${cli[@]}" shell-done 2 95 "make build"
 "${cli[@]}" send -p 5 "deploy token=abc123 done"
 sleep 0.5
-check "a failed command, with its exit code" 1 '(.title | test("sh failed \\(exit 3\\)")) and .priority == 4'
+check "a failed command, with its exit code and last error line" 1 '(.title | test("sh failed \\(exit 3\\)")) and .priority == 4 and (.message | test("⚠️ boom: disk full"))'
 check "run -q stays quiet on success" 0 '.title | test("true finished")'
 check "run -t sets the title, after the label" 1 '.title == "[test] nightly backup"'
 check "the shell hook skips interactive tools" 0 '.message | test("vim notes")'
 check "a long shell command is reported" 1 '(.title | test("make failed \\(exit 2\\)")) and (.message | test("1m35s"))'
 check "secrets are masked" 1 '.message == "deploy token=[redacted] done" and .priority == 5'
+
+# A message the server does not take is queued, then resent with the time it was meant for.
+mkdir -p "$work/down"
+printf 'url = http://127.0.0.1:1\ntopic = t\nlabel = test\n' >"$work/down/pager.conf"
+env HERDR_PLUGIN_CONFIG_DIR="$work/down" HERDR_PLUGIN_STATE_DIR="$work/state" bash "$here/bin/herdr-pager" send -t "while down" "queued" 2>/dev/null
+"${cli[@]}" send -t "back up" "next"
+sleep 0.5
+check "a message the server missed is resent, marked late" 1 '.title == "[test] while down" and (.message | test("delivered late"))'
 
 # The same, in Korean (lang = ko).
 mkdir -p "$work/ko"

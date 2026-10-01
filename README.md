@@ -30,12 +30,14 @@ Messages are in English by default; `lang = ko` switches them to Korean. The emo
 | --- | --- | --- | --- |
 | Agent finished | a working agent turns idle (or `done`) and stays so for `done_delay` seconds | 3 | session title, the agent's last reply (Claude Code and Codex transcripts), duration, pane |
 | Agent needs you | an agent is `blocked` for `blocked_delay` seconds; once per wait | 4 | the prompt at the bottom of the pane, pane |
-| Command ended | `herdr-pager run -- CMD`, or any command over `shell_threshold` seconds with the shell hook | 3, or 4 on failure | command line, exit code, duration, host and directory, pane |
+| Command ended | `herdr-pager run -- CMD`, or any command over `shell_threshold` seconds with the shell hook | 3, or 4 on failure | command line, exit code, duration, host and directory, pane; for a failed `run`, the last lines of its error output |
 | Anything else | `herdr-pager send`, for cron, systemd, CI | your choice | your message |
 
-Every title starts with a `label` (default: your user name) so machines and accounts stay apart in one list. Titles stay short for a lock screen (agent and workspace); the body starts with the tab and the session title, and ends with the pane id and a `herdr agent focus` command. Markdown in replies is flattened, since phone apps show plain text.
+Every title starts with a `label` (default: your user name) so machines and accounts stay apart in one list. Titles stay short for a lock screen (agent and workspace); the body starts with the tab and the session title, and ends with the pane id and a `herdr agent focus` command (with `--session` in a named session). Markdown in replies is flattened, since phone apps show plain text.
 
 Short blips are never sent: an agent that pauses mid-turn, or a prompt you answer within the delay, produces nothing. Each finished turn or wait is sent once, even when Herdr repeats the event.
+
+When the server cannot be reached, the message is kept in the plugin state dir and resent with the next one that gets through, or at the next agent event, marked with the time it was meant for. Messages older than a day are dropped.
 
 ## How the pieces fit
 
@@ -50,7 +52,7 @@ cron, systemd, scripts ─(herdr-pager run)───┘                        s
 
 ## Install
 
-Requires `bash` (3.2 is enough), `jq` and `curl`, on Linux or macOS.
+Requires `bash` (3.2 is enough), `jq` 1.6 or newer and `curl`, on Linux or macOS.
 
 ### 1. An ntfy server (once)
 
@@ -78,7 +80,7 @@ For iOS, keep `upstream-base-url: "https://ntfy.sh"`: iPhones only get instant p
 ### 2. The plugin, in each account
 
 ```sh
-herdr plugin install devicki/herdr-pager --ref v0.3.0
+herdr plugin install devicki/herdr-pager --ref v0.4.0
 ```
 
 It starts working at once; no restart is needed. It also links the `herdr-pager` command into `~/.local/bin` the first time it runs, for scripts, cron and the shell hook.
@@ -94,7 +96,7 @@ token = tk_...
 label = work
 ```
 
-Keep the file private (`chmod 600`); the token never appears in command lines. `HERDR_PAGER_URL`, `HERDR_PAGER_TOPIC` and `HERDR_PAGER_TOKEN` override the file.
+`#` starts a comment, on its own line or after a value. Keep the file private (`chmod 600`); the token never appears in command lines. `HERDR_PAGER_URL`, `HERDR_PAGER_TOPIC` and `HERDR_PAGER_TOKEN` override the file.
 
 ### 4. Check it
 
@@ -120,7 +122,7 @@ cron (`herdr-pager` fixes up `PATH` for `jq` and `curl` itself):
 0 3 * * * $HOME/.local/bin/herdr-pager run -q -t "nightly backup" -- /opt/backup/run.sh
 ```
 
-systemd: [`docs/systemd/herdr-pager-failure@.service`](docs/systemd/herdr-pager-failure@.service) reports any unit that fails, with the tail of its log. Copy it to `~/.config/systemd/user/` and add `OnFailure=herdr-pager-failure@%n.service` to the units you care about.
+systemd: [`docs/systemd/herdr-pager-failure@.service`](docs/systemd/herdr-pager-failure@.service) reports any unit that fails, with the tail of its log. Copy it to `~/.config/systemd/user/` and add `OnFailure=herdr-pager-failure@%n.service` to the units you care about. The result and exit status in its title need systemd 251 or newer.
 
 ### Long shell commands, without a wrapper
 
@@ -154,14 +156,14 @@ Any command that runs `shell_threshold` seconds or longer (default 60) is report
 - **What is sent**: the agent's last reply and the bottom of a waiting pane leave the machine for your ntfy server. Common credential shapes (API keys, tokens, `password=` values) are masked, and messages are cut to a few hundred characters, but keep secrets out of what agents print.
 - **Questions in plain text**: an agent that asks something in its reply, without a permission prompt, counts as finished, not waiting. The reply is in the message either way.
 - **Agents**: any agent Herdr tracks works. The last reply is read from Claude Code and Codex transcripts; other agents get the session title only.
-- Herdr's event hooks have no timeout, so the delayed check runs detached and every request is capped at 10 seconds.
+- Herdr's event hooks have no timeout, so the delayed check runs detached. Each attempt to publish is capped at 10 seconds; with two retries on timeouts and server errors, a send gives up after about 35 seconds and is queued.
 
 ## Update and uninstall
 
 Herdr has no update command; reinstall at the new tag. `pager.conf` and the enabled state survive a reinstall.
 
 ```sh
-herdr plugin install devicki/herdr-pager --ref v0.3.0 --yes
+herdr plugin install devicki/herdr-pager --ref v0.4.0 --yes
 herdr plugin uninstall devicki.pager
 ```
 
@@ -171,7 +173,7 @@ Uninstalling leaves `pager.conf` in the config directory and the `~/.local/bin/h
 
 ```sh
 herdr plugin link .
-./test.sh   # isolated Herdr + a stand-in ntfy: agent turns, blips, waits, commands, the shell hook filter, masking
+./test.sh   # isolated Herdr + a stand-in ntfy: agent turns, blips, waits, commands, the shell hook filter, masking, the resend queue
 ```
 
 To release, bump `version` in `herdr-plugin.toml`, update the `--ref` in both READMEs, commit, then `git tag -a vX.Y.Z -m vX.Y.Z && git push origin vX.Y.Z`.

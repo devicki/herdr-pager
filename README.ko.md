@@ -8,14 +8,14 @@
 ✅ [bot] claude 작업 완료 · shop-api
 📂 1 · agent › Add refresh-token rotation
 💬 Rotation is in. Tests pass; the diff is on the right.
-⏱ 4분 12초  📍 herdr:claude(w9:p1)
+⏱ 4분 12초  📍 herdr agent w9:p1 (claude)
 ↩ herdr agent focus w9:p1
 
 🙋 [bot] claude 확인 필요 · shop-api                    (높은 우선순위)
 📂 1 · agent › Add refresh-token rotation
 ❓ Bash(rm -rf build)
    Do you want to proceed?
-📍 herdr:claude(w9:p1)
+📍 herdr agent w9:p1 (claude)
 ↩ herdr agent focus w9:p1
 
 ❌ [bot] backup.sh 실패 (종료 코드 7)                   (높은 우선순위)
@@ -34,7 +34,7 @@
 | 명령 종료 | `herdr-pager run -- 명령`, 또는 셸 훅을 켰을 때 `shell_threshold`초 넘게 걸린 명령 | 3, 실패하면 4 | 명령줄, 종료 코드, 걸린 시간, 호스트와 폴더, 페인. `run`이 실패하면 에러 출력의 마지막 몇 줄도 |
 | 그 밖의 알림 | cron, systemd, CI 등에서 `herdr-pager send` | 원하는 대로 | 내 메시지 |
 
-모든 제목은 `label`(기본값: 사용자 이름)로 시작해서, 여러 머신이나 계정의 알림이 한 목록에 섞여도 구분돼요. 잠금 화면에서 읽기 좋게 제목은 짧게(에이전트와 워크스페이스) 두고, 본문은 탭과 세션 제목으로 시작해 `herdr:<이름>(<id>)` 형식의 페인 표시와 `herdr agent focus` 명령으로 끝나요(named session에서는 `--session`이 붙어요). `herdr:` 표시는 [herdr-ids](https://github.com/devicki/herdr-ids) 선택 팝업이 넣어 주는 형식과 같아서, 다른 에이전트 입력창에 그대로 붙여 넣을 수 있어요("herdr:claude(w9:p1) 확인해 줘"). 폰 앱은 일반 텍스트로 보여 주기 때문에 답변의 Markdown 강조는 풀어서 보내요.
+모든 제목은 `label`(기본값: 사용자 이름)로 시작해서, 여러 머신이나 계정의 알림이 한 목록에 섞여도 구분돼요. 잠금 화면에서 읽기 좋게 제목은 짧게(에이전트와 워크스페이스) 두고, 본문은 탭과 세션 제목으로 시작해 `herdr agent <id> (<에이전트>)` 형식의 페인 표시(에이전트가 없는 페인은 `herdr pane`)와 `herdr agent focus` 명령으로 끝나요(named session에서는 `--session`이 붙어요). 이 표시는 [herdr-ids](https://github.com/devicki/herdr-ids) 선택 팝업이 넣어 주는 형식과 같고 Herdr CLI 용어 그대로라서, 다른 에이전트 입력창에 붙여 넣으면("herdr agent w9:p1 (claude) 확인해 줘") 어떤 ID를 쓸지 바로 알아봐요. 폰 앱은 일반 텍스트로 보여 주기 때문에 답변의 Markdown 강조는 풀어서 보내요.
 
 짧은 깜빡임은 보내지 않아요. 에이전트가 턴 중간에 잠깐 멈추거나 대기 시간 안에 바로 답한 경우에는 알림이 가지 않아요. Herdr가 같은 이벤트를 여러 번 보내도 한 번의 완료나 대기는 한 번만 알려요.
 
@@ -81,7 +81,7 @@ iOS에서 쓰려면 `upstream-base-url: "https://ntfy.sh"`를 유지하세요. �
 ### 2. 플러그인 (계정마다)
 
 ```sh
-herdr plugin install devicki/herdr-pager --ref v0.7.2
+herdr plugin install devicki/herdr-pager --ref v0.8.0
 ```
 
 설치하면 바로 동작해요. 재시작할 필요 없어요. 처음 실행될 때 스크립트, cron, 셸 훅에서 쓸 수 있게 `herdr-pager` 명령을 `~/.local/bin`에 연결해 둬요.
@@ -176,7 +176,7 @@ ntfy는 4096바이트가 넘는 메시지를 첨부 파일로 바꾸고, 한글�
 Herdr에는 업데이트 명령이 없어서, 새 태그로 다시 설치하면 돼요. 다시 설치해도 `pager.conf`와 켜짐/꺼짐 상태는 그대로 남아요.
 
 ```sh
-herdr plugin install devicki/herdr-pager --ref v0.7.2 --yes
+herdr plugin install devicki/herdr-pager --ref v0.8.0 --yes
 herdr plugin uninstall devicki.pager
 ```
 

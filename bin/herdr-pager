@@ -236,17 +236,19 @@ duration() {
 }
 
 # Where a pane is, and the command that takes you back to it. Sets ws and tab (labels),
-# where ("shop-api › agent"), ref ("herdr:claude(w1:p2)", named the way herdr-ids' picker names
-# it, agent first, to paste into an agent's prompt), jump ("herdr agent focus w1:p2") and agent_json.
+# where ("shop-api › agent"), ref ("herdr agent w1:p2 (claude)", the form herdr-ids' picker types:
+# the Herdr CLI's noun and ID for the agent that is handed it), jump ("herdr agent focus w1:p2")
+# and agent_json.
 pane_context() {
-  local pane=$1 name
+  local pane=$1
   agent_json=$("$H" agent get "$pane" 2>/dev/null | jq -c '.result.agent // empty' 2>/dev/null)
   [ -n "$agent_json" ] || agent_json=$("$H" pane get "$pane" 2>/dev/null | jq -c '.result.pane // empty' 2>/dev/null)
   ws=$("$H" workspace get "$(jq -r '.workspace_id // empty' <<<"$agent_json")" 2>/dev/null | jq -r '.result.workspace.label // empty')
   tab=$("$H" tab get "$(jq -r '.tab_id // empty' <<<"$agent_json")" 2>/dev/null | jq -r '.result.tab.label // empty')
   where="${ws:-?}${tab:+ › $tab}"
-  name=$("$H" pane get "$pane" 2>/dev/null | jq -r '.result.pane | .agent // .label // "shell" | gsub("[\t\n\r]"; " ")')
-  ref="herdr:${name:-shell}($pane)"
+  ref=$("$H" pane get "$pane" 2>/dev/null | jq -r --arg p "$pane" '.result.pane
+    | "herdr \(if .agent then "agent" else "pane" end) \($p) (\(.agent // .label // "shell" | gsub("[\t\n\r]"; " ")))"')
+  [ -n "$ref" ] || ref="herdr pane $pane"
   # A named session lives under .../sessions/<name>/; the default one does not.
   hs=${HERDR_SESSION:-}
   if [ -z "$hs" ]; then

@@ -8,14 +8,14 @@ Get a push notification on your phone or laptop when an agent in [Herdr](https:/
 ✅ [bot] claude done · shop-api
 📂 1 · agent › Add refresh-token rotation
 💬 Rotation is in. Tests pass; the diff is on the right.
-⏱ 4m12s  📍 herdr:claude(w9:p1)
+⏱ 4m12s  📍 herdr agent w9:p1 (claude)
 ↩ herdr agent focus w9:p1
 
 🙋 [bot] claude needs you · shop-api                    (high priority)
 📂 1 · agent › Add refresh-token rotation
 ❓ Bash(rm -rf build)
    Do you want to proceed?
-📍 herdr:claude(w9:p1)
+📍 herdr agent w9:p1 (claude)
 ↩ herdr agent focus w9:p1
 
 ❌ [bot] backup.sh failed (exit 7)                      (high priority)
@@ -34,7 +34,7 @@ Messages are in English by default; `lang = ko` switches them to Korean. The emo
 | Command ended | `herdr-pager run -- CMD`, or any command over `shell_threshold` seconds with the shell hook | 3, or 4 on failure | command line, exit code, duration, host and directory, pane; for a failed `run`, the last lines of its error output |
 | Anything else | `herdr-pager send`, for cron, systemd, CI | your choice | your message |
 
-Every title starts with a `label` (default: your user name) so machines and accounts stay apart in one list. Titles stay short for a lock screen (agent and workspace); the body starts with the tab and the session title, and ends with the pane as `herdr:<name>(<id>)` and a `herdr agent focus` command (with `--session` in a named session). The `herdr:` reference is the form [herdr-ids](https://github.com/devicki/herdr-ids)' picker types, so you can paste it into another agent's prompt ("check herdr:claude(w9:p1)"). Markdown in replies is flattened, since phone apps show plain text.
+Every title starts with a `label` (default: your user name) so machines and accounts stay apart in one list. Titles stay short for a lock screen (agent and workspace); the body starts with the tab and the session title, and ends with the pane as `herdr agent <id> (<agent>)` (`herdr pane` for a pane without an agent) and a `herdr agent focus` command (with `--session` in a named session). The reference is the form [herdr-ids](https://github.com/devicki/herdr-ids)' picker types, in the Herdr CLI's own words, so you can paste it into another agent's prompt ("check herdr agent w9:p1 (claude)") and it knows which ID to use. Markdown in replies is flattened, since phone apps show plain text.
 
 Short blips are never sent: an agent that pauses mid-turn, or a prompt you answer within the delay, produces nothing. Each finished turn or wait is sent once, even when Herdr repeats the event.
 
@@ -81,7 +81,7 @@ For iOS, keep `upstream-base-url: "https://ntfy.sh"`: iPhones only get instant p
 ### 2. The plugin, in each account
 
 ```sh
-herdr plugin install devicki/herdr-pager --ref v0.7.2
+herdr plugin install devicki/herdr-pager --ref v0.8.0
 ```
 
 It starts working at once; no restart is needed. It also links the `herdr-pager` command into `~/.local/bin` the first time it runs, for scripts, cron and the shell hook.
@@ -175,7 +175,7 @@ ntfy turns a message over 4096 bytes into an attachment, and Korean takes 3 byte
 Herdr has no update command; reinstall at the new tag. `pager.conf` and the enabled state survive a reinstall.
 
 ```sh
-herdr plugin install devicki/herdr-pager --ref v0.7.2 --yes
+herdr plugin install devicki/herdr-pager --ref v0.8.0 --yes
 herdr plugin uninstall devicki.pager
 ```
 

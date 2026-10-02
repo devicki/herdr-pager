@@ -59,7 +59,7 @@ say() { h pane report-agent "$p" --source test --agent claude --state "$1" >/dev
 say working; say idle 3.5
 check "finished turn is reported" 1 '.title | test("claude done · shop-api")'
 check "  with the pane and the way back" 1 '.message | test("herdr agent focus '"$p"'")'
-check "  and a herdr:name(id) reference to paste into an agent" 1 '.message | test("📍 herdr:claude\\('"$p"'\\)")'
+check "  and a reference to paste into an agent" 1 '.message | test("📍 herdr agent '"$p"' \\(claude\\)")'
 # A pause mid-turn (idle, then working again within the delay) is not.
 say working; say idle 0.8; say working 3
 check "a blip mid-turn is not reported" 1 '.title | test("done")'

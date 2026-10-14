@@ -158,6 +158,7 @@ herdr-pager shell-init fish | source
 | `quiet_hours` | 없음(하루 종일 알림) | 방해금지 시간. `00:00-08:00`처럼 `HH:MM-HH:MM`으로 써요. 이 시간에는 알림을 보내지 않아요 |
 | `quiet_mode` | `hold` | `hold`: 방해금지 시간이 끝나면 모아 둔 알림을 보내요. `drop`: 버려요 |
 | `agent_skip` | 없음 | 알림을 받지 않을 에이전트. Herdr가 보여 주는 이름을 띄어쓰기나 쉼표로 구분해 써요: `codex, devin` |
+| `session_skip` | 없음 | 알림을 받지 않을 Herdr 세션 이름(`herdr --session 이름`, `--session` 없이 띄운 세션은 `default`). 띄어쓰기나 쉼표로 구분해 써요: `dispatch`. 다른 도구가 이미 알림을 보내는 세션에 써요 |
 
 방해금지 시간은 폰이나 ntfy 서버가 아니라 pager가 돌아가는 컴퓨터의 시계(`date`)를 따르고, 자정을 넘겨도 돼요(`23:00-07:00`). `hold`면 모아 둔 알림을 시간이 끝나는 즉시 `🌙 03:12 알림이에요 (방해금지 시간이라 늦게 전달)` 표시와 함께 보내요. `herdr-pager test`는 방해금지 시간에도 보내요.
 
@@ -186,7 +187,7 @@ herdr plugin uninstall devicki.pager
 
 ```sh
 herdr plugin link .
-./test.sh   # 격리된 Herdr와 가짜 ntfy로 완료, 깜빡임, 대기, 명령, 셸 훅 필터, 비밀값 가림, 재전송 대기열, Claude agent view, 방해금지 시간, agent_skip을 확인해요
+./test.sh   # 격리된 Herdr와 가짜 ntfy로 완료, 깜빡임, 대기, 명령, 셸 훅 필터, 비밀값 가림, 재전송 대기열, Claude agent view, 방해금지 시간, agent_skip, session_skip을 확인해요
 ```
 
 릴리스할 때는 `herdr-plugin.toml`의 `version`을 올리고, 두 README의 `--ref`를 바꿔 커밋한 뒤 `git tag -a vX.Y.Z -m vX.Y.Z && git push origin vX.Y.Z`를 실행하세요.

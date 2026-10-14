@@ -157,6 +157,7 @@ Any command that runs `shell_threshold` seconds or longer (default 60) is report
 | `quiet_hours` | none (all day) | quiet hours, `HH:MM-HH:MM`, such as `00:00-08:00`; nothing is sent then |
 | `quiet_mode` | `hold` | `hold`: send what quiet hours held when they end; `drop`: discard it |
 | `agent_skip` | none | agents never reported, by the name Herdr shows, separated by spaces or commas: `codex, devin` |
+| `session_skip` | none | Herdr sessions whose agents are never reported, by name (`herdr --session NAME`; the one started without it is `default`), separated by spaces or commas: `dispatch`. For a session another tool already reports on |
 
 Quiet hours follow this machine's clock (`date`), not the phone's or the ntfy server's, and may span midnight (`23:00-07:00`). With `hold`, each message held goes out when they end, marked `🌙 From 03:12; held for quiet hours.`; `herdr-pager test` always goes out.
 
@@ -185,7 +186,7 @@ Uninstalling leaves `pager.conf` in the config directory and the `~/.local/bin/h
 
 ```sh
 herdr plugin link .
-./test.sh   # isolated Herdr + a stand-in ntfy: agent turns, blips, waits, commands, the shell hook filter, masking, the resend queue, Claude's agent view, quiet hours, agent_skip
+./test.sh   # isolated Herdr + a stand-in ntfy: agent turns, blips, waits, commands, the shell hook filter, masking, the resend queue, Claude's agent view, quiet hours, agent_skip, session_skip
 ```
 
 To release, bump `version` in `herdr-plugin.toml`, update the `--ref` in both READMEs, commit, then `git tag -a vX.Y.Z -m vX.Y.Z && git push origin vX.Y.Z`.

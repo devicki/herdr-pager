@@ -62,6 +62,11 @@ if [ ! -e "$conf" ] && mkdir -p "$confdir" 2>/dev/null; then
 # Agents never reported, by the name Herdr shows (claude, codex, devin, ...), separated by spaces
 # or commas.
 # agent_skip = codex, devin
+#
+# Herdr sessions whose agents are never reported, by name (`herdr --session NAME`; the one
+# started without --session is `default`), separated by spaces or commas. For a session that
+# another tool already reports on, such as an orchestrator's.
+# session_skip = dispatch
 EOF
 fi
 # A value, without a trailing ` # note` or blanks (a `#` inside a value, as in a color, stays).
@@ -249,12 +254,19 @@ pane_context() {
   ref=$("$H" pane get "$pane" 2>/dev/null | jq -r --arg p "$pane" '.result.pane
     | "herdr \(if .agent then "agent" else "pane" end) \($p) (\(.agent // .label // "shell" | gsub("[\t\n\r]"; " ")))"')
   [ -n "$ref" ] || ref="herdr pane $pane"
-  # A named session lives under .../sessions/<name>/; the default one does not.
-  hs=${HERDR_SESSION:-}
+  hs=$(session_name)
+  [ "$hs" != default ] || hs=""
+  jump="herdr${hs:+ --session $hs} agent focus $pane"
+}
+
+# The Herdr session the hook runs for. A named session lives under .../sessions/<name>/; the
+# default one does not, and is called `default`.
+session_name() {
+  local hs=${HERDR_SESSION:-}
   if [ -z "$hs" ]; then
     case "${HERDR_SOCKET_PATH:-}" in (*/sessions/*/*) hs=$(basename "$(dirname "$HERDR_SOCKET_PATH")") ;; esac
   fi
-  jump="herdr${hs:+ --session $hs} agent focus $pane"
+  printf '%s' "${hs:-default}"
 }
 
 # Phones show ntfy messages as plain text: drop Markdown emphasis and heading marks.
@@ -336,6 +348,8 @@ event() {
   pane=$(jq -r '.data.pane_id // empty' <<<"$ev" 2>/dev/null)
   status=$(jq -r '.data.agent_status // empty' <<<"$ev" 2>/dev/null)
   [ -n "$pane" ] && [ -n "$status" ] || return 0
+  # Plugins run in every session of the user; a skipped session is left alone entirely.
+  case " $(conf_list session_skip) " in (*" $(session_name) "*) return 0 ;; esac
   mkdir -p "$statedir"
   key=$(printf %s "${HERDR_SOCKET_PATH:-}#$pane" | cksum | cut -d' ' -f1)
   now=$(date +%s)

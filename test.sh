@@ -19,6 +19,7 @@ check() { # description, expected count, jq filter over received messages
 }
 cleanup() {
   h server stop >/dev/null 2>&1 || :
+  for sess in dispatch side; do h --session "$sess" server stop >/dev/null 2>&1 || :; done
   kill "${ntfy:-}" 2>/dev/null || :
   rm -f "$home"
 }
@@ -44,7 +45,7 @@ EOF
 port=$((20000 + RANDOM % 20000))
 python3 "$work/ntfy.py" "$port" "$work/received.jsonl" &
 ntfy=$!
-printf 'url = http://127.0.0.1:%s\ntopic = t\nlabel = test   # a note\ndone_delay = 2\nblocked_delay = 2\nagent_skip = devin,codex\n' "$port" \
+printf 'url = http://127.0.0.1:%s\ntopic = t\nlabel = test   # a note\ndone_delay = 2\nblocked_delay = 2\nagent_skip = devin,codex\nsession_skip = dispatch\n' "$port" \
   >"$work/home/.config/herdr/plugins/config/devicki.pager/pager.conf"
 
 # Scripts, cron and the shell hook run the command directly, through the ~/.local/bin link.
@@ -74,6 +75,18 @@ k=$(h pane split "$p" --direction down --no-focus | jq -r .result.pane.pane_id)
 h pane report-agent "$k" --source test --agent codex --state working >/dev/null; sleep 0.5
 h pane report-agent "$k" --source test --agent codex --state idle >/dev/null; sleep 3.5
 check "agent_skip = devin,codex: codex is not reported" 0 '.title | test("codex")'
+# The plugin hooks every session of the user. One in session_skip is never reported; another
+# named session is, with the --session its way back needs.
+for sess in dispatch side; do
+  "${env_[@]}" "$herdr" --session "$sess" server >/dev/null 2>&1 &
+  for _ in $(seq 50); do h --session "$sess" pane list >/dev/null 2>&1 && break; sleep 0.2; done
+  sp=$(h --session "$sess" workspace create --cwd /tmp --label "$sess-ws" | jq -r .result.root_pane.pane_id)
+  h --session "$sess" pane report-agent "$sp" --source test --agent claude --state working >/dev/null; sleep 0.5
+  h --session "$sess" pane report-agent "$sp" --source test --agent claude --state idle >/dev/null
+done
+sleep 3.5
+check "session_skip = dispatch: its agents are not reported" 0 '.title | test("dispatch-ws")'
+check "  another named session's are, with its --session" 1 '(.title | test("side-ws")) and (.message | test("herdr --session side agent focus"))'
 
 # Claude's agent view has no session of its own: a finished turn is reported with the background
 # session that just finished, by its name and reply. A session open in a pane is not that one.

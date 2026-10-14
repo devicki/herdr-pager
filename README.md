@@ -29,7 +29,7 @@ Messages are in English by default; `lang = ko` switches them to Korean. The emo
 
 | Event | When | Priority | Contents |
 | --- | --- | --- | --- |
-| Agent finished | a working agent turns idle (or `done`) and stays so for `done_delay` seconds | 3 | session title, the agent's last reply (Claude Code and Codex transcripts), duration, pane |
+| Agent finished | a working agent turns idle (or `done`) and stays so for `done_delay` seconds, with a new reply since the last report (Claude Code, Codex) | 3 | session title, the agent's last reply (Claude Code and Codex transcripts), duration, pane |
 | Agent needs you | an agent is `blocked` for `blocked_delay` seconds; once per wait | 4 | the prompt at the bottom of the pane, pane |
 | Command ended | `herdr-pager run -- CMD`, or any command over `shell_threshold` seconds with the shell hook | 3, or 4 on failure | command line, exit code, duration, host and directory, pane; for a failed `run`, the last lines of its error output |
 | Anything else | `herdr-pager send`, for cron, systemd, CI | your choice | your message |
@@ -81,7 +81,7 @@ For iOS, keep `upstream-base-url: "https://ntfy.sh"`: iPhones only get instant p
 ### 2. The plugin, in each account
 
 ```sh
-herdr plugin install devicki/herdr-pager --ref v0.8.0
+herdr plugin install devicki/herdr-pager --ref v0.8.1
 ```
 
 It starts working at once; no restart is needed. It also links the `herdr-pager` command into `~/.local/bin` the first time it runs, for scripts, cron and the shell hook.
@@ -175,7 +175,7 @@ ntfy turns a message over 4096 bytes into an attachment, and Korean takes 3 byte
 Herdr has no update command; reinstall at the new tag. `pager.conf` and the enabled state survive a reinstall.
 
 ```sh
-herdr plugin install devicki/herdr-pager --ref v0.8.0 --yes
+herdr plugin install devicki/herdr-pager --ref v0.8.1 --yes
 herdr plugin uninstall devicki.pager
 ```
 

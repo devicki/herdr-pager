@@ -29,7 +29,7 @@
 
 | 상황 | 조건 | 우선순위 | 내용 |
 | --- | --- | --- | --- |
-| 에이전트 작업 완료 | 작업 중이던 에이전트가 idle(또는 `done`)이 되고 `done_delay`초 동안 그대로일 때 | 3 | 세션 제목, 에이전트의 마지막 답변(Claude Code·Codex 대화 기록), 걸린 시간, 페인 |
+| 에이전트 작업 완료 | 작업 중이던 에이전트가 idle(또는 `done`)이 되고 `done_delay`초 동안 그대로일 때. Claude Code·Codex는 지난 알림 뒤 새 답변이 있을 때만 | 3 | 세션 제목, 에이전트의 마지막 답변(Claude Code·Codex 대화 기록), 걸린 시간, 페인 |
 | 에이전트가 답을 기다림 | `blocked` 상태가 `blocked_delay`초 동안 이어질 때. 같은 대기에는 한 번만 | 4 | 페인 아래쪽에 뜬 질문, 페인 |
 | 명령 종료 | `herdr-pager run -- 명령`, 또는 셸 훅을 켰을 때 `shell_threshold`초 넘게 걸린 명령 | 3, 실패하면 4 | 명령줄, 종료 코드, 걸린 시간, 호스트와 폴더, 페인. `run`이 실패하면 에러 출력의 마지막 몇 줄도 |
 | 그 밖의 알림 | cron, systemd, CI 등에서 `herdr-pager send` | 원하는 대로 | 내 메시지 |
@@ -81,7 +81,7 @@ iOS에서 쓰려면 `upstream-base-url: "https://ntfy.sh"`를 유지하세요. �
 ### 2. 플러그인 (계정마다)
 
 ```sh
-herdr plugin install devicki/herdr-pager --ref v0.8.0
+herdr plugin install devicki/herdr-pager --ref v0.8.1
 ```
 
 설치하면 바로 동작해요. 재시작할 필요 없어요. 처음 실행될 때 스크립트, cron, 셸 훅에서 쓸 수 있게 `herdr-pager` 명령을 `~/.local/bin`에 연결해 둬요.
@@ -176,7 +176,7 @@ ntfy는 4096바이트가 넘는 메시지를 첨부 파일로 바꾸고, 한글�
 Herdr에는 업데이트 명령이 없어서, 새 태그로 다시 설치하면 돼요. 다시 설치해도 `pager.conf`와 켜짐/꺼짐 상태는 그대로 남아요.
 
 ```sh
-herdr plugin install devicki/herdr-pager --ref v0.8.0 --yes
+herdr plugin install devicki/herdr-pager --ref v0.8.1 --yes
 herdr plugin uninstall devicki.pager
 ```
 

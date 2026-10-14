@@ -280,17 +280,21 @@ agent_view_finished() { # pane
   [ -z "$best" ] || printf '%s\n' "$best"
 }
 
-# The agent's last reply, from its own transcript when we know where that lives.
-last_reply() { # agent session-id
+# The transcript entry (one JSON line) of the agent's last reply, when we know where that lives.
+last_entry() { # agent session-id
   local f=""
   case "$1" in
   (claude) f=$(ls -t "$HOME"/.claude/projects/*/"$2".jsonl 2>/dev/null | head -n1)
     [ -n "$f" ] && tail -n 400 "$f" | jq -Rc 'fromjson? | select(.type == "assistant")
-      | [.message.content[]? | select(.type == "text") | .text] | join("\n") | select(length > 0)' | tail -n1 | jq -r . ;;
+      | select([.message.content[]? | select(.type == "text") | .text] | join("") | length > 0)' | tail -n1 ;;
   (codex) f=$(find "$HOME/.codex/sessions" -name "*$2.jsonl" 2>/dev/null | tail -n1)
-    [ -n "$f" ] && tail -n 400 "$f" | jq -Rc 'fromjson? | select(.type == "event_msg" and .payload.type == "agent_message")
-      | .payload.message' | tail -n1 | jq -r . ;;
+    [ -n "$f" ] && tail -n 400 "$f" | jq -Rc 'fromjson? | select(.type == "event_msg" and .payload.type == "agent_message")' | tail -n1 ;;
   esac
+}
+
+reply_text() { # stdin: a last_entry line
+  jq -r 'if .type == "assistant" then [.message.content[]? | select(.type == "text") | .text] | join("\n")
+    else .payload.message // empty end'
 }
 
 # The bottom of the pane: what an agent that waits for you is asking.
@@ -355,7 +359,7 @@ later() { # pane kind gen
 }
 
 confirm() {
-  local pane=$1 kind=$2 want=$3 key delay now cur sent="" agent session title note body excerpt ws="" tab="" where="" ref="" jump="" hs="" bg=""
+  local pane=$1 kind=$2 want=$3 key delay now cur sent="" agent session title note body excerpt entry="" sum="" ws="" tab="" where="" ref="" jump="" hs="" bg=""
   key=$(printf %s "${HERDR_SOCKET_PATH:-}#$pane" | cksum | cut -d' ' -f1)
   delay=$(conf_get "${kind}_delay")
   case "$delay" in ('' | *[!0-9]*) delay=$([ "$kind" = done ] && echo 15 || echo 10) ;; esac
@@ -388,7 +392,15 @@ confirm() {
   note=$title
   case "$tab" in (*"$title"*) note="" ;; esac
   if [ "$kind" = done ]; then
-    excerpt=$(last_reply "$agent" "$session" 2>/dev/null | plain | redact | clip "$(chars reply_chars 500)")
+    entry=$(last_entry "$agent" "$session" 2>/dev/null)
+    if [ -n "$entry" ]; then
+      # Herdr can misread an idle agent's screen as working and back (a status line cut with
+      # "…" looks like Claude's spinner); no new reply since the last report means no new turn.
+      sum=$(printf %s "$entry" | cksum | cut -d' ' -f1)
+      [ "$sum" != "$(cat "$statedir/$key.reply" 2>/dev/null)" ] || return 0
+      echo "$sum" >"$statedir/$key.reply"
+    fi
+    excerpt=$(printf '%s\n' "$entry" | reply_text 2>/dev/null | plain | redact | clip "$(chars reply_chars 500)")
     body=$(line 📂 "$tab"; line 📝 "$note"; line 💬 "$excerpt"
       printf '⏱ %s  📍 %s\n↩ %s' "$(duration $((now - since)))" "$ref" "$jump")
     publish "$agent $(word done) · ${ws:-?}" "$body" 3 "white_check_mark,$agent"

@@ -102,6 +102,16 @@ h pane report-agent "$v" --source test --agent claude --state working >/dev/null
 h pane report-agent "$v" --source test --agent claude --state idle >/dev/null; sleep 3.5
 check "agent view: the background session that finished, by name and reply" 1 \
   '(.message | test("📝 nightly triage")) and (.message | test("💬 reply of bg1"))'
+# Herdr misreading an idle screen flips the agent to working and back: no new reply, no report.
+touch "$work/home/.claude/projects/-w/bg1.jsonl"
+h pane report-agent "$v" --source test --agent claude --state working >/dev/null; sleep 0.5
+h pane report-agent "$v" --source test --agent claude --state idle >/dev/null; sleep 3.5
+check "a turn with no new reply is not reported again" 1 '.message | test("💬 reply of bg1")'
+printf '{"type":"assistant","message":{"content":[{"type":"text","text":"next reply"}]}}\n' \
+  >>"$work/home/.claude/projects/-w/bg1.jsonl"
+h pane report-agent "$v" --source test --agent claude --state working >/dev/null; sleep 0.5
+h pane report-agent "$v" --source test --agent claude --state idle >/dev/null; sleep 3.5
+check "  a new reply is" 1 '.message | test("💬 next reply")'
 
 # Commands and jobs, through the CLI.
 cli=(env HERDR_PLUGIN_CONFIG_DIR="$work/home/.config/herdr/plugins/config/devicki.pager"

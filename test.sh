@@ -169,6 +169,15 @@ env LC_ALL=C HERDR_PLUGIN_CONFIG_DIR="$work/ko" HERDR_PLUGIN_STATE_DIR="$work/st
 sleep 0.5
 check "lang = ko: Korean wording and durations" 1 '.title == "[test] make 실패 (종료 코드 3)" and (.message | test("1분 35초"))'
 check "error_chars = 5: cut at five Korean characters" 1 '.message | test("⚠️ 가나다라마…")'
+# Japanese (lang = ja) and Traditional Chinese (lang = zh-TW).
+for l in ja zh-TW; do
+  mkdir -p "$work/$l"
+  printf 'url = http://127.0.0.1:%s\ntopic = t\nlabel = test\nlang = %s\n' "$port" "$l" >"$work/$l/pager.conf"
+  env HERDR_PLUGIN_CONFIG_DIR="$work/$l" HERDR_PLUGIN_STATE_DIR="$work/state" bash "$here/bin/herdr-pager" shell-done 3 3725 "make build"
+done
+sleep 0.5
+check "lang = ja: Japanese wording and durations" 1 '.title == "[test] make 失敗 (終了コード 3)" and (.message | test("1時間2分"))'
+check "lang = zh-TW: Traditional Chinese wording and durations" 1 '.title == "[test] make 失敗 (結束代碼 3)" and (.message | test("1小時2分"))'
 
 [ "$fail" -eq 0 ] && echo PASS
 exit "$fail"

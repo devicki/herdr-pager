@@ -1,6 +1,6 @@
 # Contributing to herdr-pager
 
-Thanks for helping. herdr-pager sends ntfy push notifications when agents finish or need you, and when commands end. Issues and pull requests are welcome, in English or Korean.
+Thanks for helping. herdr-pager sends ntfy push notifications when agents finish or need you, and when commands end. Issues and pull requests are welcome, in English, Korean, Japanese or Chinese.
 
 ## Reporting a bug
 
@@ -16,7 +16,7 @@ Open an issue with the **Bug report** form. The versions it asks for and the exa
    ```
    They need jq, curl and python3. It runs an isolated Herdr and a stand-in ntfy server, so nothing reaches a real one.
 4. If you fix a bug, add a check to `test.sh` that fails without your fix.
-5. Update `README.md` and `README.ko.md` together when behaviour or settings change. The English README is the main one; a Korean update can be a rough one, it will be polished.
+5. Update `README.md` and its translations (`README.ko.md`, `README.ja.md`, `README.zh-TW.md`) together when behaviour or settings change. The English README is the main one; a translation update can be a rough one, it will be polished.
 6. Open a pull request and say what changed and how you tested it.
 
 ## Things to keep in mind
@@ -27,9 +27,9 @@ Open an issue with the **Bug report** form. The versions it asks for and the exa
   ```
   In bash 3.2, a `case` inside `$( )` needs its patterns to start with `(`. Use BSD-compatible flags (no `sed -i`, no `\I`) and `stat -c %Y || stat -f %m`.
 - Never paste an ntfy token, password or a real server address in an issue or a PR; the tests use a stand-in server.
-- Messages exist in English and Korean (`word()` in bin/herdr-pager); add both for new wording.
+- Messages exist in English, Korean, Japanese and Traditional Chinese (`word()` in bin/herdr-pager); add all four for new wording.
 - Keep `bin/herdr-pager` executable: scripts, cron and the shell hooks run it directly.
 
 ## Releases
 
-The maintainer releases: bump `version` in `herdr-plugin.toml`, update the `--ref` in both READMEs, then tag `vX.Y.Z`. You do not need to bump versions in a pull request.
+The maintainer releases: bump `version` in `herdr-plugin.toml`, update the `--ref` in every README, then tag `vX.Y.Z`. You do not need to bump versions in a pull request.

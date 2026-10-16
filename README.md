@@ -1,6 +1,6 @@
 # herdr-pager
 
-English | [한국어](README.ko.md)
+English | [한국어](README.ko.md) | [日本語](README.ja.md) | [繁體中文](README.zh-TW.md)
 
 Get a push notification on your phone or laptop when an agent in [Herdr](https://herdr.dev) finishes or needs your answer, and when a command, script or scheduled job ends. Each message says what happened and which pane it came from, with the command that takes you back there. Delivery goes through [ntfy](https://ntfy.sh), ideally one you host yourself.
 
@@ -23,7 +23,7 @@ Get a push notification on your phone or laptop when an agent in [Herdr](https:/
 ⏱ 12m03s  📁 ~/ops
 ```
 
-Messages are in English by default; `lang = ko` switches them to Korean. The emoji in front of each title is the message's ntfy tag, which the apps show that way.
+Messages are in English by default; `lang = ko`, `ja` or `zh-TW` switches them to Korean, Japanese or Traditional Chinese. The emoji in front of each title is the message's ntfy tag, which the apps show that way.
 
 ## What it reports
 
@@ -81,7 +81,7 @@ For iOS, keep `upstream-base-url: "https://ntfy.sh"`: iPhones only get instant p
 ### 2. The plugin, in each account
 
 ```sh
-herdr plugin install devicki/herdr-pager --ref v0.8.1
+herdr plugin install devicki/herdr-pager --ref v0.9.0
 ```
 
 It starts working at once; no restart is needed. It also links the `herdr-pager` command into `~/.local/bin` the first time it runs, for scripts, cron and the shell hook.
@@ -145,7 +145,7 @@ Any command that runs `shell_threshold` seconds or longer (default 60) is report
 | --- | --- | --- |
 | `url`, `topic`, `token` | | where to publish |
 | `label` | user name | prefix of every title |
-| `lang` | `en` | language of the messages: `en` or `ko` |
+| `lang` | `en` | language of the messages: `en`, `ko`, `ja` or `zh-TW` |
 | `done_delay` | 15 | seconds an agent must stay finished before it is reported |
 | `blocked_delay` | 10 | seconds an agent must keep waiting before it is reported |
 | `shell_threshold` | 60 | shell hook: minimum command duration in seconds |
@@ -160,7 +160,7 @@ Any command that runs `shell_threshold` seconds or longer (default 60) is report
 
 Quiet hours follow this machine's clock (`date`), not the phone's or the ntfy server's, and may span midnight (`23:00-07:00`). With `hold`, each message held goes out when they end, marked `🌙 From 03:12; held for quiet hours.`; `herdr-pager test` always goes out.
 
-ntfy turns a message over 4096 bytes into an attachment, and Korean takes 3 bytes a character, so keep a whole message under about 1,300 Korean characters.
+ntfy turns a message over 4096 bytes into an attachment, and Korean, Japanese and Chinese take 3 bytes a character, so keep a whole message under about 1,300 of those characters.
 
 ## Notes
 
@@ -175,7 +175,7 @@ ntfy turns a message over 4096 bytes into an attachment, and Korean takes 3 byte
 Herdr has no update command; reinstall at the new tag. `pager.conf` and the enabled state survive a reinstall.
 
 ```sh
-herdr plugin install devicki/herdr-pager --ref v0.8.1 --yes
+herdr plugin install devicki/herdr-pager --ref v0.9.0 --yes
 herdr plugin uninstall devicki.pager
 ```
 
@@ -188,7 +188,7 @@ herdr plugin link .
 ./test.sh   # isolated Herdr + a stand-in ntfy: agent turns, blips, waits, commands, the shell hook filter, masking, the resend queue, Claude's agent view, quiet hours, agent_skip
 ```
 
-To release, bump `version` in `herdr-plugin.toml`, update the `--ref` in both READMEs, commit, then `git tag -a vX.Y.Z -m vX.Y.Z && git push origin vX.Y.Z`.
+To release, bump `version` in `herdr-plugin.toml`, update the `--ref` in every README, commit, then `git tag -a vX.Y.Z -m vX.Y.Z && git push origin vX.Y.Z`.
 
 ## License
 

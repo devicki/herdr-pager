@@ -33,7 +33,7 @@ if [ ! -e "$conf" ] && mkdir -p "$confdir" 2>/dev/null; then
 # Shown at the start of every title, to tell machines or accounts apart. Default: your user name.
 # label = work
 #
-# Language of the messages: en (default) or ko.
+# Language of the messages: en (default), ko, ja or zh-TW.
 # lang = ko
 #
 # Seconds an agent must stay finished / waiting before it is reported. Short blips (an agent
@@ -77,7 +77,8 @@ token="${HERDR_PAGER_TOKEN:-$(conf_get token)}"
 label="$(conf_get label)"
 label="${label:-${USER:-$(id -un)}}"
 lang="$(conf_get lang)"
-lang="${lang:-en}"
+# zh-TW, zh_TW and zh all mean Traditional Chinese; anything unknown is English.
+case "$lang" in (ko*) lang=ko ;; (ja*) lang=ja ;; (zh*) lang=zh ;; (*) lang=en ;; esac
 # A length setting, or its default when unset or not a number.
 chars() { # key default
   local v
@@ -86,7 +87,7 @@ chars() { # key default
   echo "$v"
 }
 
-# The words of a message, in English or Korean.
+# The words of a message, in English, Korean, Japanese or Traditional Chinese.
 word() {
   case "$lang:$1" in
   (ko:done) echo "작업 완료" ;;
@@ -99,6 +100,26 @@ word() {
   (ko:held) echo "🌙 $2 알림이에요 (방해금지 시간이라 늦게 전달)" ;;
   (ko:quiet) echo "방해금지 시간이라 $2에 보낼게요" ;;
   (ko:quiet-drop) echo "방해금지 시간이라 보내지 않았어요" ;;
+  (ja:done) echo "作業完了" ;;
+  (ja:needs) echo "確認が必要" ;;
+  (ja:finished) echo "完了" ;;
+  (ja:failed) echo "失敗 (終了コード $2)" ;;
+  (ja:test) echo "herdr-pager テスト" ;;
+  (ja:test-body) echo "$2 の通知はこのトピックに届きます。" ;;
+  (ja:late) echo "🕒 $2 に送るはずの通知です (サーバーに接続できず遅れて配信)" ;;
+  (ja:held) echo "🌙 $2 の通知です (おやすみ時間のため遅れて配信)" ;;
+  (ja:quiet) echo "おやすみ時間のため $2 に送ります" ;;
+  (ja:quiet-drop) echo "おやすみ時間のため送信しませんでした" ;;
+  (zh:done) echo "工作完成" ;;
+  (zh:needs) echo "需要你確認" ;;
+  (zh:finished) echo "完成" ;;
+  (zh:failed) echo "失敗 (結束代碼 $2)" ;;
+  (zh:test) echo "herdr-pager 測試" ;;
+  (zh:test-body) echo "$2 的通知會送到這個主題。" ;;
+  (zh:late) echo "🕒 原定 $2 送出的通知 (伺服器無法連線，延後送達)" ;;
+  (zh:held) echo "🌙 $2 的通知 (勿擾時段，延後送達)" ;;
+  (zh:quiet) echo "勿擾時段，將於 $2 送出" ;;
+  (zh:quiet-drop) echo "勿擾時段，未送出" ;;
   (*:done) echo "done" ;;
   (*:needs) echo "needs you" ;;
   (*:finished) echo "finished" ;;
@@ -230,6 +251,10 @@ duration() {
     if [ "$h" -gt 0 ]; then printf '%d시간 %d분' "$h" "$m"
     elif [ "$m" -gt 0 ]; then printf '%d분 %d초' "$m" "$s"
     else printf '%d초' "$s"; fi
+  elif [ "$lang" = ja ] || [ "$lang" = zh ]; then
+    if [ "$h" -gt 0 ]; then printf '%d%s%d分' "$h" "$([ "$lang" = ja ] && echo 時間 || echo 小時)" "$m"
+    elif [ "$m" -gt 0 ]; then printf '%d分%d秒' "$m" "$s"
+    else printf '%d秒' "$s"; fi
   elif [ "$h" -gt 0 ]; then printf '%dh%02dm' "$h" "$m"
   elif [ "$m" -gt 0 ]; then printf '%dm%02ds' "$m" "$s"
   else printf '%ds' "$s"; fi

@@ -1,6 +1,6 @@
 # herdr-pager
 
-[English](README.md) | 한국어
+[English](README.md) | 한국어 | [日本語](README.ja.md) | [繁體中文](README.zh-TW.md)
 
 [Herdr](https://herdr.dev)의 에이전트가 작업을 마치거나 내 답을 기다릴 때, 그리고 명령·스크립트·예약 작업이 끝났을 때 폰이나 노트북으로 알림을 보내 주는 플러그인이에요. 알림마다 무슨 일이 있었는지, 어느 페인에서 일어났는지, 그리고 그 페인으로 돌아가는 명령까지 담겨요. 전송은 [ntfy](https://ntfy.sh)로 하고, 직접 호스팅하는 서버를 쓰는 걸 권해요.
 
@@ -23,7 +23,7 @@
 ⏱ 12분 3초  📁 ~/ops
 ```
 
-위 예시는 설정에 `lang = ko`를 넣었을 때의 모습이에요. 기본값은 영어예요. 제목 앞의 이모지는 알림의 ntfy 태그를 앱이 그렇게 보여 주는 거예요.
+위 예시는 설정에 `lang = ko`를 넣었을 때의 모습이에요. 기본값은 영어이고, `ja`는 일본어, `zh-TW`는 대만 번체 중국어예요. 제목 앞의 이모지는 알림의 ntfy 태그를 앱이 그렇게 보여 주는 거예요.
 
 ## 알려 주는 것
 
@@ -81,7 +81,7 @@ iOS에서 쓰려면 `upstream-base-url: "https://ntfy.sh"`를 유지하세요. �
 ### 2. 플러그인 (계정마다)
 
 ```sh
-herdr plugin install devicki/herdr-pager --ref v0.8.1
+herdr plugin install devicki/herdr-pager --ref v0.9.0
 ```
 
 설치하면 바로 동작해요. 재시작할 필요 없어요. 처음 실행될 때 스크립트, cron, 셸 훅에서 쓸 수 있게 `herdr-pager` 명령을 `~/.local/bin`에 연결해 둬요.
@@ -146,7 +146,7 @@ herdr-pager shell-init fish | source
 | --- | --- | --- |
 | `url`, `topic`, `token` | | 알림을 보낼 곳 |
 | `label` | 사용자 이름 | 모든 제목 앞에 붙는 이름 |
-| `lang` | `en` | 알림 언어: `en` 또는 `ko` |
+| `lang` | `en` | 알림 언어: `en`, `ko`, `ja`, `zh-TW` |
 | `done_delay` | 15 | 완료 상태가 이 시간(초) 동안 이어져야 알림 |
 | `blocked_delay` | 10 | 대기 상태가 이 시간(초) 동안 이어져야 알림 |
 | `shell_threshold` | 60 | 셸 훅: 알릴 최소 실행 시간(초) |
@@ -176,7 +176,7 @@ ntfy는 4096바이트가 넘는 메시지를 첨부 파일로 바꾸고, 한글�
 Herdr에는 업데이트 명령이 없어서, 새 태그로 다시 설치하면 돼요. 다시 설치해도 `pager.conf`와 켜짐/꺼짐 상태는 그대로 남아요.
 
 ```sh
-herdr plugin install devicki/herdr-pager --ref v0.8.1 --yes
+herdr plugin install devicki/herdr-pager --ref v0.9.0 --yes
 herdr plugin uninstall devicki.pager
 ```
 
@@ -189,7 +189,7 @@ herdr plugin link .
 ./test.sh   # 격리된 Herdr와 가짜 ntfy로 완료, 깜빡임, 대기, 명령, 셸 훅 필터, 비밀값 가림, 재전송 대기열, Claude agent view, 방해금지 시간, agent_skip을 확인해요
 ```
 
-릴리스할 때는 `herdr-plugin.toml`의 `version`을 올리고, 두 README의 `--ref`를 바꿔 커밋한 뒤 `git tag -a vX.Y.Z -m vX.Y.Z && git push origin vX.Y.Z`를 실행하세요.
+릴리스할 때는 `herdr-plugin.toml`의 `version`을 올리고, 모든 README의 `--ref`를 바꿔 커밋한 뒤 `git tag -a vX.Y.Z -m vX.Y.Z && git push origin vX.Y.Z`를 실행하세요.
 
 ## 라이선스
 
